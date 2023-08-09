@@ -1,15 +1,22 @@
 import atexit
 import multiprocessing
 import os
+import time
 from typing import Literal, Union
 from zipfile import ZipFile
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.interpolate
+import scipy.optimize
 import scipy.signal
 import yaml
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
+
+
+def gaussian(x, a, u, s):
+    return a * np.exp(-((x - u) / s)**2 / 2)
 
 
 def __read_text(string, sep='\r\n'):
@@ -32,8 +39,11 @@ def load_data(path: Union[str, bytes], threads: int = multiprocessing.cpu_count(
     if os.path.isdir(path):
         files = filter(txt_filter, os.listdir(path))
         files = [open(os.path.join(path, file), 'rb').read() for file in files]
-        with multiprocessing.Pool(threads) as pool:
-            return np.concatenate(pool.map(__read_text, files))
+        if files:
+            with multiprocessing.Pool(threads) as pool:
+                return np.concatenate(pool.map(__read_text, files))
+        else:
+            return np.array([])
     elif path.endswith('zip'):
         with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
             files = filter(txt_filter, zf.namelist())
@@ -58,12 +68,15 @@ def extract_data(raw_data: Union[np.ndarray, str], length: int = 1000, upper: fl
         extracted_data (ndarray): 2D array with shape (trace, length)
     '''
     if isinstance(raw_data, str): raw_data = load_data(raw_data, **kwargs)
-    split = np.stack(np.split(raw_data, raw_data.size / length), axis=0)
-    res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
-    if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
-    elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
-    elif method == 'both': pass
-    return res
+    if raw_data.size:
+        split = np.stack(np.split(raw_data, raw_data.size / length), axis=0)
+        res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
+        if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
+        elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
+        elif method == 'both': pass
+        return res
+    else:
+        return np.empty((0, length))
 
 
 class Hist1D:
@@ -119,6 +132,34 @@ class Hist1D:
         self.ax.plot(*peak_position, 'xr')
         for i, j in zip(*peak_position):
             self.ax.annotate(f'{i:1.2E}', xy=(i, j+0.02), ha='center', fontsize=8)'''
+
+    def get_peak(self, *, window_length=25, polyorder=5, prominence=0.05):
+        """
+        Get peak position and width by fitting Gaussian function
+
+        Args:
+            window_length (int)
+            polyorder (int)
+            prominence (float)
+
+        Returns:
+            avg (ndarray): average
+            stdev (ndarray): standard derivative
+            height (ndarray): peak height
+        """
+        x = np.sqrt(self.bins[:-1] * self.bins[1:])
+        y = (self.height - self.height.min()) / (self.height.max() - self.height.min())
+        y = scipy.signal.savgol_filter(y, window_length, polyorder)
+        peak, *_ = scipy.signal.find_peaks(y, prominence=prominence)
+        _, _, left, right = scipy.signal.peak_widths(y, peak, rel_height=1)
+        left, right = np.ceil(left).astype(int), np.ceil(right).astype(int)
+        avg, stdev, height = [], [], []
+        for i in range(left.size):
+            (a, u, s), *_ = scipy.optimize.curve_fit(gaussian, x[left[i]:right[i]], self.height[left[i]:right[i]], bounds=(0, np.inf))
+            avg.append(u)
+            stdev.append(s)
+            height.append(a)
+        return np.array(avg), np.array(stdev), np.array(height)
 
 
 class Hist2D:
@@ -238,6 +279,8 @@ class Run(FileSystemEventHandler):
             if (event.src_path.endswith('.txt')):
                 try:
                     print(f'File create detected: {event.src_path}')
+                    if os.path.getsize(event.src_path) == 0:
+                        time.sleep(0.5)
                     self.add_data(event.src_path)
                 except Exception as E:
                     print(f'ERROR: {type(E).__name__}: {E.args}')
