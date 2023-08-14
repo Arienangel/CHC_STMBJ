@@ -7,20 +7,20 @@ Run:
 
 extract_data:
   length: 1000 # length of extracted data per trace
-  upper: 2 # extract data greater then upper limit
-  lower: 0.0001 # extract data less then lower limit
+  upper: 3.2 # extract data greater then upper limit
+  lower: 0.000001 # extract data less then lower limit
   method: "pull" # "pull", "crash" or "both"
   # threads: 8 # number of CPU threads to use
 
 Hist1D:
   min: 0.00001
   max: 3.16
-  num_bin: 1000
+  num_bin: 550
 
 Hist2D:
-  x_min: -1
-  x_max: 1
-  num_x_bin: 100
-  y_min: 0.00005
+  x_min: -0.3
+  x_max: 0.5
+  num_x_bin: 800
+  y_min: 0.00001
   y_max: 3.16
-  num_y_bin: 100
+  num_y_bin: 550

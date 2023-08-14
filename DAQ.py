@@ -10,6 +10,7 @@ import numpy as np
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
+import scipy.ndimage
 import yaml
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -106,7 +107,7 @@ class Hist1D:
         self.plot = self.ax.stairs(np.zeros(self.bins.size - 1), self.bins, fill=True)
         self.ax.set_xscale('log')
         self.ax.set_xlim(left=self.min, right=self.max)
-        self.ax.set_xlabel('$Conductance (G/G_0)$')
+        self.ax.set_xlabel('$Conductance\/(G/G_0)$')
         self.ax.set_ylabel('$Count/trace$')
         self.ax.grid(visible=True, which='major')
 
@@ -192,12 +193,12 @@ class Hist2D:
         self.height, *_ = np.histogram2d([], [], (self.x_bins, self.y_bins))
         self.trace = 0
         self.fig, self.ax = plt.subplots()
-        self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap='rainbow', vmin=0)
+        self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap='viridis', vmin=0)
         self.ax.set_yscale('log')
         self.ax.set_xlim(left=self.x_min, right=self.x_max)
         self.ax.set_ylim(bottom=self.y_min, top=self.y_max)
-        self.ax.set_xlabel('$Distance (nm)$')
-        self.ax.set_ylabel('$Conductance (G/G_0)$')
+        self.ax.set_xlabel('$Distance\/(nm)$')
+        self.ax.set_ylabel('$Conductance\/(G/G_0)$')
         self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
 
     @property
@@ -218,7 +219,7 @@ class Hist2D:
         _, x = np.mgrid[:zero_point.size, :data.shape[-1]]
         x = (x - np.expand_dims(zero_point, axis=-1)) / x_conversion
         self.height = self.height + np.histogram2d(x.ravel(), data.ravel(), (self.x_bins, self.y_bins))[0]
-        height_per_trace = self.height_per_trace
+        height_per_trace = scipy.ndimage.gaussian_filter(self.height_per_trace, sigma=2)
         self.plot.set_array(height_per_trace.T)
         self.plot.set_clim(0, height_per_trace.max())
 
