@@ -305,13 +305,19 @@ class Run(FileSystemEventHandler):
 
 if __name__ == '__main__':
     if os.path.exists('config.yaml'):
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument("-p", "--path")
+        args = parser.parse_args()
         with open('config.yaml', mode='r', encoding='utf-8') as f:
             conf = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)
+        if args.path:
+            conf['Run']['path'] = args.path
         Run(**conf['Run'])
     else:
         print('Generating config file')
         with open('config.yaml', mode='w', encoding='utf-8') as f:
-            yaml.safe_dump({'Run': {'path': 'test_data/blank   10.txt', 'realtime': True, 'hist1d': True, 'hist2d': True, 'x_conversion': 800}, 'extract_data': {'length': 1000, 'upper': 2, 'lower': 0.0001, 'method': 'pull'}, 'Hist1D': {'min': 1e-05, 'max': 3.16, 'num_bin': 1000}, 'Hist2D': {'x_min': -1, 'x_max': 1, 'num_x_bin': 100, 'y_min': 5e-05, 'y_max': 3.16, 'num_y_bin': 100}}, f) # yapf: disable
+            yaml.safe_dump({'Run': {'path': './test_data', 'realtime': False, 'hist1d': True, 'hist2d': True, 'x_conversion': 800}, 'extract_data': {'length': 1000, 'upper': 3.2, 'lower': 1e-6, 'method': 'pull'}, 'Hist1D': {'min': 1e-05, 'max': 3.16, 'num_bin': 550}, 'Hist2D': {'x_min': -0.3, 'x_max': 0.5, 'num_x_bin': 800, 'y_min': 1e-05, 'y_max': 3.16, 'num_y_bin': 550}}, f) # yapf: disable
         print(f'Edit the config file and try again: {os.path.join(os.getcwd(), "config.yaml")}')
         input()
         exit()
