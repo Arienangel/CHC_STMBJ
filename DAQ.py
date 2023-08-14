@@ -10,7 +10,6 @@ import numpy as np
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
-import scipy.ndimage
 import yaml
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -215,11 +214,14 @@ class Hist2D:
             x_conversion (float, optional): divide x axis by this value
         """
         self.trace = self.trace + data.shape[0]
-        zero_point = np.argmin(np.abs(data - 0.5), axis=1)
-        _, x = np.mgrid[:zero_point.size, :data.shape[-1]]
-        x = (x - np.expand_dims(zero_point, axis=-1)) / x_conversion
+        nearest = np.argpartition(np.abs(data - 0.5), 2, -1)[:, :2]
+        x1, x2 = np.split(nearest, 2, axis=1)
+        y1, y2 = np.split(np.take_along_axis(data, nearest, axis=-1), 2, axis=1)
+        zero_point = x1 + (0.5 - y1) / (y2 - y1) * (x2 - x1)
+        _, x = np.mgrid[:data.shape[0], :data.shape[-1]]
+        x = (x - zero_point) / x_conversion
         self.height = self.height + np.histogram2d(x.ravel(), data.ravel(), (self.x_bins, self.y_bins))[0]
-        height_per_trace = scipy.ndimage.gaussian_filter(self.height_per_trace, sigma=2)
+        height_per_trace = self.height_per_trace
         self.plot.set_array(height_per_trace.T)
         self.plot.set_clim(0, height_per_trace.max())
 
