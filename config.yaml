@@ -22,6 +22,7 @@ STM_bj:
 I_Ebias:
   path: "./test_data/I_Ebias"
   segment: 4
+  num_file: 10
   realtime: false
   extract_data:
     height: 1.45

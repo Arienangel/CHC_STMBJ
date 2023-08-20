@@ -131,16 +131,18 @@ class Run(Base_Runner):
     Args:
         path (str): directory of files, or txt file
         segment (int): number of segments in one cycle
+        num_file (int): number of files to finish one cycle
 
     Attributes:
         hist_GV (Hist_GV)
         hist_IV (Hist_IV)
     """
 
-    def __init__(self, path: str, segment: int = 4, **kwargs) -> None:
+    def __init__(self, path: str, segment: int = 4, num_file: int=10,  **kwargs) -> None:
         self.hist_GV = Hist_GV(**conf['hist_GV'])
         self.hist_IV = Hist_IV(**conf['hist_IV'])
         self.segment = segment
+        self.num_file=num_file
         self.pending = []
         super().__init__(path, **kwargs)
 
@@ -148,7 +150,7 @@ class Run(Base_Runner):
         if os.path.isdir(path):
             if not os.listdir(path): return  # empty directory
         self.pending.append(path)
-        I, V = extract_data(self.pending, **conf['extract_data'])
+        I, V = extract_data(self.pending[-self.num_file:], **conf['extract_data'])
         if I.shape[0] < self.segment:
             return
         else:
