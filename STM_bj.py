@@ -26,7 +26,8 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        split = np.stack(np.split(raw_data, raw_data.size / length), axis=0)
+        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > raw_data.mean(), 1, 0))), distance=length)
+        split = np.stack([raw_data[i - length // 2:i + length // 2] for i in step])
         res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
         if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
         elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
@@ -92,6 +93,7 @@ class Hist_GS(Hist2D):
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$Distance\/(nm)$')
         self.ax.set_ylabel('$Conductance\/(G/G_0)$')
+        self.colorbar.set_label('$Count/trace$')
         self.x_conversion = x_conversion
 
     def add_data(self, G: np.ndarray, **kwargs) -> None:
@@ -129,11 +131,13 @@ class Run(Base_Runner):
         super().__init__(path, **kwargs)
 
     def add_data(self, path: str, **kwargs) -> None:
+        print(f'File detected: {path}')
         if os.path.isdir(path):
             if not os.listdir(path): return  # empty directory
         extracted = extract_data(path, **conf['extract_data'])
         self.hist_G.add_data(extracted)
         self.hist_GS.add_data(extracted)
+        print(f'Traces: {self.hist_G.trace}')
 
 
 if __name__ == '__main__':

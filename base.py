@@ -6,6 +6,8 @@ import time
 from abc import abstractmethod
 from typing import Literal, Union
 from zipfile import ZipFile
+import matplotlib
+from matplotlib.colors import LinearSegmentedColormap
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,6 +15,16 @@ import pandas as pd
 from scipy.constants import physical_constants
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
+
+px = 1 / plt.rcParams['figure.dpi']
+matplotlib.rc('font', size=16)
+cmap = LinearSegmentedColormap('Cmap',
+                               segmentdata={
+                                   'red': [[0, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.25, 1, 1], [0.3, 1, 1], [0.5, 1, 1], [1, 1, 1]],
+                                   'green': [[0, 1, 1], [0.1, 0, 0], [0.15, 1, 1], [0.25, 1, 1], [0.3, 0.5, 0.5], [0.5, 0, 0], [1, 0, 0]],
+                                   'blue': [[0, 1, 1], [0.1, 1, 1], [0.15, 0, 0], [0.25, 0, 0], [0.3, 0, 0], [0.5, 0, 0], [1, 1, 1]]
+                               },
+                               N=1024)
 
 G0, *_ = physical_constants['conductance quantum']
 
@@ -109,7 +121,7 @@ class Hist1D:
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if x_scale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if x_scale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.ax = plt.subplots(figsize=(800 * px, 600 * px))
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(x_scale)
@@ -162,13 +174,13 @@ class Hist2D:
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
         self.height, *_ = np.histogram2d([], [], (self.x_bins, self.y_bins))
         self.trace = 0
-        self.fig, self.ax = plt.subplots()
-        self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap='viridis', vmin=0)
+        self.fig, self.ax = plt.subplots(figsize=(800 * px, 600 * px))
+        self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)
         self.ax.set_xscale(xscale)
         self.ax.set_yscale(yscale)
-        self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
+        self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
 
     @property
     def height_per_trace(self):
@@ -237,7 +249,6 @@ class Base_Runner(FileSystemEventHandler):
         if isinstance(event, FileCreatedEvent):
             if (event.src_path.endswith('.txt')):
                 try:
-                    print(f'File create detected: {event.src_path}')
                     if os.path.getsize(event.src_path) == 0: time.sleep(0.5)
                     self.add_data(event.src_path)
                 except Exception as E:
