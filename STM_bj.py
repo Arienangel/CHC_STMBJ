@@ -26,15 +26,15 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > raw_data.mean(), 1, 0))), distance=length)
-        split = np.stack([raw_data[i - length // 2:i + length // 2] for i in step])
-        res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
-        if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
-        elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
-        elif method == 'both': pass
-        return res
-    else:
-        return np.empty((0, length))
+        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper + lower) / 2, 1, 0))), distance=length)
+        if len(step):
+            split = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in step])
+            res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
+            if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
+            elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
+            elif method == 'both': pass
+            return res
+    return np.empty((0, length))
 
 
 class Hist_G(Hist1D):

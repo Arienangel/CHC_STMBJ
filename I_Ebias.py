@@ -29,7 +29,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, l
     else: return np.empty((2, 0, length))
 
 
-def noise_remove(I: np.ndarray, V: np.ndarray, V_range: float = None, I_max: float = None, **kwargs):
+def noise_remove(I: np.ndarray, V: np.ndarray, V_range: float = None, I_max: float = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
     '''
     Remove noise traces
 
@@ -53,7 +53,7 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V_range: float = None, I_max: flo
     return I, V
 
 
-def zeroing(I: np.ndarray, V: np.ndarray):
+def zeroing(I: np.ndarray, V: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     '''
     Set minimum current value at V=0
 
@@ -140,11 +140,13 @@ class Run(Base_Runner):
         hist_IV (Hist_IV)
     """
 
-    def __init__(self, path: str, segment: int = 4, num_file: int = 10, **kwargs) -> None:
+    def __init__(self, path: str, segment: int = 4, num_file: int = 10, noise_remove: bool = True, zeroing: bool = False, **kwargs) -> None:
         self.hist_GV = Hist_GV(**conf['hist_GV'])
         self.hist_IV = Hist_IV(**conf['hist_IV'])
         self.segment = segment
         self.num_file = num_file
+        self.noise_remove = noise_remove
+        self.zeroing = zeroing
         self.pending = []
         super().__init__(path, **kwargs)
 
@@ -156,7 +158,8 @@ class Run(Base_Runner):
         if I.shape[0] < self.segment:
             return
         else:
-            I, V = noise_remove(I, V, **conf['noise_remove'])
+            if self.noise_remove: I, V = noise_remove(I, V, **conf['noise_remove'])
+            if self.zeroing: I, V = zeroing(I, V)
             if I.size:
                 self.hist_GV.add_data(I, V)
                 self.hist_IV.add_data(I, V)

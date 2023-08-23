@@ -20,9 +20,9 @@ px = 1 / plt.rcParams['figure.dpi']
 matplotlib.rc('font', size=16)
 cmap = LinearSegmentedColormap('Cmap',
                                segmentdata={
-                                   'red': [[0, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.25, 1, 1], [0.3, 1, 1], [0.5, 1, 1], [1, 1, 1]],
-                                   'green': [[0, 1, 1], [0.1, 0, 0], [0.15, 1, 1], [0.25, 1, 1], [0.3, 0.5, 0.5], [0.5, 0, 0], [1, 0, 0]],
-                                   'blue': [[0, 1, 1], [0.1, 1, 1], [0.15, 0, 0], [0.25, 0, 0], [0.3, 0, 0], [0.5, 0, 0], [1, 1, 1]]
+                                   'red': [[0, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.2, 1, 1], [0.3, 1, 1], [0.5, 1, 1], [1, 1, 1]],
+                                   'green': [[0, 1, 1], [0.1, 0, 0], [0.15, 1, 1], [0.2, 1, 1], [0.3, 0.5, 0.5], [0.5, 0, 0], [1, 0, 0]],
+                                   'blue': [[0, 1, 1], [0.1, 1, 1], [0.15, 0, 0], [0.2, 0, 0], [0.3, 0, 0], [0.5, 0, 0], [1, 1, 1]]
                                },
                                N=1024)
 
@@ -82,9 +82,8 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
     if path.endswith('.txt'):
         return np.loadtxt(path, unpack=True)
     else:
-        txt_filter = lambda file: file.endswith('.txt')
         if os.path.isdir(path):
-            files = filter(txt_filter, os.listdir(path))
+            files = filter(lambda file: file.endswith('.txt'), os.listdir(path))
             files = [open(os.path.join(path, file), 'rb').read() for file in files]
             if files:
                 with multiprocessing.Pool(threads) as pool:
@@ -93,7 +92,7 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
                 return None
         elif path.endswith('zip'):
             with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
-                files = filter(txt_filter, zf.namelist())
+                files = filter(lambda file: file.endswith('.txt') and '/' not in file, zf.namelist())
                 files = map(zf.read, files)
                 return np.concatenate(pool.map(__read_text, files), axis=-1)
 
