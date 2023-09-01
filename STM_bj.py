@@ -37,6 +37,28 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
     return np.empty((0, length))
 
 
+def get_distance(G: np.ndarray, zero_point: float = 0.5, x_conversion: float = 1, **kwargs) -> np.ndarray:
+    """
+    Get distance from conductance array
+
+    Args:
+        G (ndarray): 2D G array with shape (trace, length)
+        zero_point (float): set x=0 at G=zero_point
+        x_conversion (float, optional): point per distance
+
+    Returns:
+        x (ndarray): 2D x array with shape (trace, length)
+    """
+    _, x = np.mgrid[:G.shape[0], :G.shape[-1]]
+    n, x1 = np.where((G[:, :-1] > 0.5) & (G[:, 1:] < 0.5))
+    _, start, count = np.unique(n, return_counts=True, return_index=True)
+    x1 = x1[start + count - 1]
+    x2 = x1 + 1
+    y1, y2 = G[:, x1].diagonal(), G[:, x2].diagonal()
+    zero_point = x1 + (0.5 - y1) / (y2 - y1) * (x2 - x1)
+    return (x - np.expand_dims(zero_point, axis=-1)) / x_conversion
+
+
 class Hist_G(Hist1D):
 
     def __init__(self, xlim: tuple[float, float] = (1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
@@ -102,14 +124,8 @@ class Hist_GS(Hist2D):
 
         Args:
             G (ndarray): 2D G array with shape (trace, length)
-            x_conversion (float, optional): divide x axis by this value
         """
-        nearest = np.argpartition(np.abs(G - 0.5), 2, -1)[:, :2]
-        x1, x2 = np.split(nearest, 2, axis=1)
-        y1, y2 = np.split(np.take_along_axis(G, nearest, axis=-1), 2, axis=1)
-        zero_point = x1 + (0.5 - y1) / (y2 - y1) * (x2 - x1)
-        _, x = np.mgrid[:G.shape[0], :G.shape[-1]]
-        x = (x - zero_point) / self.x_conversion
+        x = get_distance(G, zero_point=0.5, x_conversion=self.x_conversion)
         super().add_data(x, G, **kwargs)
 
 
