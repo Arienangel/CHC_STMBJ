@@ -17,6 +17,7 @@ STM_bj:
     num_y_bin: 550
     x_scale: "linear"
     y_scale: "log"
+    zero_point: 0.5
     x_conversion: 800
 
 I_Ebias:

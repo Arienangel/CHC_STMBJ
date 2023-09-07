@@ -30,32 +30,32 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         if len(step):
             split = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in step])
             res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
-            if method == 'pull': res = res[np.where(res[:, 0] > res[:, -1], True, False)]
-            elif method == 'crash': res = res[np.where(res[:, 0] < res[:, -1], True, False)]
-            elif method == 'both': pass
-            return res
+            if method == 'pull': return res[np.where((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper), True, False)]
+            elif method == 'crash': return res[np.where((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower), True, False)]
+            elif method == 'both': return res[np.where(((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper)) | ((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower)), True, False)]
     return np.empty((0, length))
 
 
-def get_distance(G: np.ndarray, zero_point: float = 0.5, x_conversion: float = 1, **kwargs) -> np.ndarray:
+def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float = 1, **kwargs) -> np.ndarray:
     """
-    Get distance from conductance array
+    Get displacement from conductance array
 
     Args:
         G (ndarray): 2D G array with shape (trace, length)
         zero_point (float): set x=0 at G=zero_point
-        x_conversion (float, optional): point per distance
+        x_conversion (float, optional): point per displacement
 
     Returns:
         x (ndarray): 2D x array with shape (trace, length)
     """
+    is_pull = G[:, 0] > G[:, -1]
     _, x = np.mgrid[:G.shape[0], :G.shape[-1]]
-    n, x1 = np.where((G[:, :-1] > 0.5) & (G[:, 1:] < 0.5))
+    n, x1 = np.where(((G[:, :-1] > zero_point) & (G[:, 1:] < zero_point) & np.expand_dims(is_pull, axis=-1)) | ((G[:, :-1] < zero_point) & (G[:, 1:] > zero_point) & np.expand_dims(~is_pull, axis=-1)))
     _, start, count = np.unique(n, return_counts=True, return_index=True)
-    x1 = x1[start + count - 1]
+    x1 = x1[start + (count - 1) * np.where(is_pull, 1, 0)]
     x2 = x1 + 1
     y1, y2 = G[:, x1].diagonal(), G[:, x2].diagonal()
-    zero_point = x1 + (0.5 - y1) / (y2 - y1) * (x2 - x1)
+    zero_point = x1 + (zero_point - y1) / (y2 - y1) * (x2 - x1)
     return (x - np.expand_dims(zero_point, axis=-1)) / x_conversion
 
 
@@ -90,32 +90,32 @@ class Hist_G(Hist1D):
             prominence (float)
 
         Returns:
+            height (ndarray): peak height
             avg (ndarray): average
             stdev (ndarray): standard derivative
-            height (ndarray): peak height
         """
-        x = np.sqrt(self.x_bins[:-1] * self.x_bins[1:])
-        y = (self.height - self.height.min()) / (self.height.max() - self.height.min())
-        y = scipy.signal.savgol_filter(y, window_length, polyorder)
-        peak, *_ = scipy.signal.find_peaks(y, prominence=prominence)
-        _, _, left, right = scipy.signal.peak_widths(y, peak, rel_height=1)
-        left, right = np.ceil(left).astype(int), np.ceil(right).astype(int)
-        avg, stdev, height = [], [], []
-        for i in range(left.size):
-            (a, u, s), *_ = scipy.optimize.curve_fit(gaussian, x[left[i]:right[i]], self.height[left[i]:right[i]], bounds=(0, np.inf))
-            avg.append(u)
-            stdev.append(s)
-            height.append(a)
-        return np.array(avg), np.array(stdev), np.array(height)
+        X = np.sqrt(self.x_bins[:-1] * self.x_bins[1:])
+        Y = self.height
+        return get_peak(X, Y, window_length=window_length, polyorder=polyorder, prominence=prominence)
 
 
 class Hist_GS(Hist2D):
 
-    def __init__(self, xlim: tuple[float, float] = (-0.3, 0.5), ylim: tuple[float, float] = (1e-5, 10**0.5), num_x_bin: float = 800, num_y_bin: float = 550, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', x_conversion: float = 800, **kwargs) -> None:
+    def __init__(self,
+                 xlim: tuple[float, float] = (-0.3, 0.5),
+                 ylim: tuple[float, float] = (1e-5, 10**0.5),
+                 num_x_bin: float = 800,
+                 num_y_bin: float = 550,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 yscale: Literal['linear', 'log'] = 'log',
+                 zero_point: float = 0.5,
+                 x_conversion: float = 800,
+                 **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('$Distance\/(nm)$')
+        self.ax.set_xlabel('$Displacement\/(nm)$')
         self.ax.set_ylabel('$Conductance\/(G/G_0)$')
         self.colorbar.set_label('$Count/trace$')
+        self.zero_point = zero_point
         self.x_conversion = x_conversion
 
     def add_data(self, G: np.ndarray, **kwargs) -> None:
@@ -125,7 +125,7 @@ class Hist_GS(Hist2D):
         Args:
             G (ndarray): 2D G array with shape (trace, length)
         """
-        x = get_distance(G, zero_point=0.5, x_conversion=self.x_conversion)
+        x = get_displacement(G, zero_point=self.zero_point, x_conversion=self.x_conversion)
         super().add_data(x, G, **kwargs)
 
 

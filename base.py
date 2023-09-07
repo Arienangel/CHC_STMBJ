@@ -12,6 +12,8 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.optimize
+import scipy.signal
 from scipy.constants import physical_constants
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -57,8 +59,43 @@ def gaussian(x: np.ndarray, a: float, u: float, s: float) -> np.ndarray:
     Returns:
         x (ndarray): output value
     """
-
     return a * np.exp(-((x - u) / s)**2 / 2)
+
+def multi_gaussian(x: np.ndarray, *args: float):
+    """
+    Sum of multiple gaussian distribution curve
+
+    Args:
+        x (ndarray): input value
+        args (float): a1, a2, a3..., u1, u2, u3..., s1, s2, s3...
+
+    Returns:
+        x (ndarray): output value
+    """
+    return np.sum([gaussian(x, *i) for i in np.array(args).reshape(len(args)//3, 3)], axis=0)
+
+def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, prominence=0.05):
+    """
+    Get peak position and width by fitting Gaussian function
+
+    Args:
+        X (np.ndarray)
+        Y (np.ndarray)
+        window_length (int)
+        polyorder (int)
+        prominence (float)
+
+    Returns:
+        height (ndarray): peak height
+        avg (ndarray): average
+        stdev (ndarray): standard derivative
+    """
+    y = (Y - Y.min()) / (Y.max() - Y.min())
+    y = scipy.signal.savgol_filter(y, window_length, polyorder)
+    peak, *_ = scipy.signal.find_peaks(y, prominence=prominence)
+    _, _, left, right = scipy.signal.peak_widths(y, peak, rel_height=1)
+    left, right = np.ceil(left).astype(int), np.ceil(right).astype(int)
+    return np.stack([scipy.optimize.curve_fit(gaussian, X[left[i]:right[i]], Y[left[i]:right[i]], bounds=(0, np.inf))[0] for i in range(left.size)]).T
 
 
 def __read_text(byte: bytes, delimiter='\t'):
