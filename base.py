@@ -72,7 +72,7 @@ def multi_gaussian(x: np.ndarray, *args: float):
     Returns:
         x (ndarray): output value
     """
-    return np.sum([gaussian(x, *i) for i in np.array(args).reshape(len(args)//3, 3)], axis=0)
+    return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3 ,len(args)//3).T], axis=0)
 
 def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, prominence=0.05):
     """
