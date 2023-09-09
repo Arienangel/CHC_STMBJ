@@ -61,6 +61,7 @@ def gaussian(x: np.ndarray, a: float, u: float, s: float) -> np.ndarray:
     """
     return a * np.exp(-((x - u) / s)**2 / 2)
 
+
 def multi_gaussian(x: np.ndarray, *args: float):
     """
     Sum of multiple gaussian distribution curve
@@ -72,7 +73,8 @@ def multi_gaussian(x: np.ndarray, *args: float):
     Returns:
         x (ndarray): output value
     """
-    return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3 ,len(args)//3).T], axis=0)
+    return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
+
 
 def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, prominence=0.05):
     """
@@ -181,6 +183,11 @@ class Hist1D:
         self.plot.set_data(height_per_trace)
         self.ax.set_ylim(0, height_per_trace.max())
 
+    def clear_data(self):
+        self.trace = 0
+        self.height.fill(0)
+        self.plot.set_data(self.height)
+
 
 class Hist2D:
     """
@@ -236,6 +243,11 @@ class Hist2D:
         height_per_trace = self.height_per_trace
         self.plot.set_array(height_per_trace.T)
         self.plot.set_clim(0, height_per_trace.max())
+
+    def clear_data(self):
+        self.trace = 0
+        self.height.fill(0)
+        self.plot.set_array(self.height.T)
 
 
 class Base_Runner(FileSystemEventHandler):
@@ -300,7 +312,7 @@ class Base_Runner(FileSystemEventHandler):
         """
 
     @abstractmethod
-    def reset_data(self, **kwargs) -> None:
+    def clear_data(self, **kwargs) -> None:
         """
         Clear all data
         """
