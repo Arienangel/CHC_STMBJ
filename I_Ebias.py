@@ -48,7 +48,7 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V_range: float = None, I_max: flo
         filter = np.abs(zero_point) < V_range
         I, V = I[filter], V[filter]
     if I_max:
-        filter = np.where(np.abs(I).max(axis=1) < 1e-5, True, False)
+        filter = np.where(np.abs(I).max(axis=1) < I_max, True, False)
         I, V = I[filter], V[filter]
     return I, V
 

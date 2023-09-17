@@ -22,11 +22,11 @@ px = 1 / plt.rcParams['figure.dpi']
 matplotlib.rc('font', size=16)
 cmap = LinearSegmentedColormap('Cmap',
                                segmentdata={
-                                   'red': [[0, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.2, 1, 1], [0.3, 1, 1], [0.5, 1, 1], [1, 1, 1]],
-                                   'green': [[0, 1, 1], [0.1, 0, 0], [0.15, 1, 1], [0.2, 1, 1], [0.3, 0.5, 0.5], [0.5, 0, 0], [1, 0, 0]],
-                                   'blue': [[0, 1, 1], [0.1, 1, 1], [0.15, 0, 0], [0.2, 0, 0], [0.3, 0, 0], [0.5, 0, 0], [1, 1, 1]]
+                                   'red': [[0, 1, 1], [0.05, 0, 0], [0.1, 0, 0], [0.15, 1, 1], [0.3, 1, 1], [1, 1, 1]],
+                                   'green': [[0, 1, 1], [0.05, 0, 0], [0.1, 1, 1], [0.15, 1, 1], [0.3, 0, 0], [1, 0, 0]],
+                                   'blue': [[0, 1, 1], [0.05, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.3, 0, 0], [1, 1, 1]]
                                },
-                               N=1024)
+                               N=256)
 
 G0, *_ = physical_constants['conductance quantum']
 
@@ -117,7 +117,8 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
     """
     if isinstance(path, list):
         return np.concatenate(list(map(load_data, path)), axis=-1)
-
+    if path.endswith('.npy'):
+        return np.load(path)
     if path.endswith('.txt'):
         return np.loadtxt(path, unpack=True)
     else:
