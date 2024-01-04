@@ -13,6 +13,7 @@ import matplotlib
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
@@ -35,7 +36,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.frame_stat.pack(side='bottom', anchor='w')
         self.directory_path = tk.StringVar()
         self.directory_recursive = tk.BooleanVar(value=False)
-        self.extract_length = tk.IntVar(value=1000)
+        self.extract_length = tk.IntVar(value=2000)
         self.lower = tk.DoubleVar(value=3.2)
         self.upper = tk.DoubleVar(value=1e-6)
         self.zero_point = tk.DoubleVar(value=0.5)
@@ -55,6 +56,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         tk.Label(self.frame_conf, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_conf, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
         tk.Button(self.frame_conf, text="Folder", command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=6, padx=5)
+        tk.Checkbutton(self.frame_conf, variable=self.directory_recursive, text="Recursive").grid(row=1, column=6, columnspan=2, padx=5, sticky='w')
         tk.Button(self.frame_conf, text="Files", command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=7)
         tk.Label(self.frame_conf, text='Length: ').grid(row=1, column=0)
         tk.Entry(self.frame_conf, textvariable=self.extract_length, justify='center').grid(row=1, column=1)
@@ -112,6 +114,7 @@ class STM_bj_GUI(FileSystemEventHandler):
             plt.close()
             for item in self.frame_fig.winfo_children():
                 item.destroy()
+            self.extract_data = np.empty((0, self.extract_length.get()))
             self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
             self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
             try:
@@ -128,7 +131,17 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=4, pady=10)
             self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_fig, pack_toolbar=False)
             self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky=tkinter.constants.W)
-            self.extract_config = (self.extract_length.get(), self.upper.get(), self.lower.get(), self.direction.get())
+            self.extract_config = {
+                "length": self.extract_length.get(),
+                "upper": self.upper.get(),
+                "lower": self.lower.get(),
+                "method": self.direction.get(),
+                "zero_point": self.zero_point.get(),
+                "x_conversion": self.points_per_nm.get(),
+                'G_scale': self.G_scale.get(),
+                'X_scale': self.X_scale.get(),
+                'recursive': self.directory_recursive.get()
+            }
             self.add_data(path)
             tk.Button(self.frame_conf, text='Export', command=self.export).grid(row=5, column=7, padx=10)
             if isinstance(path, list): return
@@ -159,8 +172,9 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.stat_lastfile.config(text=path)
             if not os.listdir(path): return  # empty directory
         else:
-            self.stat_lastfile.config(text="")
-        extracted = STM_bj.extract_data(path, *self.extract_config)
+            self.stat_lastfile.config(text="(Multiple)")
+        extracted = STM_bj.extract_data(path, **self.extract_config)
+        self.extract_data = np.vstack([self.extract_data, extracted])
         self.hist_G.add_data(extracted)
         self.hist_GS.add_data(extracted)
         self.canvas_G.draw()
@@ -168,9 +182,73 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.stat_traces.config(text=self.hist_G.trace)
 
     def export(self):
+        Export_prompt(self.extract_data, self.hist_G, self.hist_GS, **self.extract_config)
+
+
+class Export_prompt:
+
+    def __init__(self, G: np.ndarray, hist_G: STM_bj.Hist_G, hist_GS: STM_bj.Hist_GS, **conf) -> None:
+        self.window = tk.Toplevel()
+        self.window.grab_set()
+        self.window.title('Export')
+        self.G = G
+        self.hist_G = hist_G
+        self.hist_GS = hist_GS
+        self.conf = conf
+
+        self.export_type = tk.IntVar(value=1)
+        tk.Radiobutton(self.window, text='Raw data', variable=self.export_type, value=1).grid(row=0, column=0, sticky='w')
+        tk.Radiobutton(self.window, text='1D histogram', variable=self.export_type, value=2).grid(row=1, column=0, sticky='w')
+        tk.Radiobutton(self.window, text='2D histogram', variable=self.export_type, value=3).grid(row=2, column=0, sticky='w')
+
+        self.check_raw_X = tk.BooleanVar(value=True)  #disabled
+        self.check_raw_G = tk.BooleanVar(value=True)
+        self.check_raw_logG = tk.BooleanVar(value=True)
+        tk.Checkbutton(self.window, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=1, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_raw_G, text='G').grid(row=0, column=2, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_raw_logG, text='logG').grid(row=0, column=3, sticky='w')
+
+        self.check_1D_G = tk.BooleanVar(value=True)  #disabled
+        self.check_1D_count = tk.BooleanVar(value=True)  #disabled
+        self.check_1D_pertraces = tk.BooleanVar(value=False)
+        tk.Checkbutton(self.window, variable=self.check_1D_G, text='G', state='disabled').grid(row=1, column=1, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_1D_count, text='Count', state='disabled').grid(row=1, column=2, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_1D_pertraces, text='per traces').grid(row=1, column=3, sticky='w')
+
+        self.check_2D_axis = tk.BooleanVar(value=False)
+        self.check_2D_count = tk.BooleanVar(value=True)  #disabled
+        self.check_2D_pertraces = tk.BooleanVar(value=False)
+        tk.Checkbutton(self.window, variable=self.check_2D_axis, text='Axis').grid(row=2, column=1, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_2D_count, text='Count', state='disabled').grid(row=2, column=2, sticky='w')
+        tk.Checkbutton(self.window, variable=self.check_2D_pertraces, text='per traces').grid(row=2, column=3, sticky='w')
+
+        tk.Button(self.window, text='Export', bg='lime', command=self.run).grid(row=3, columnspan=4)
+
+    def run(self):
         path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
         if path:
-            np.savetxt(path, self.hist_GS.height.T, delimiter=",")
+            match self.export_type.get():
+                case 1:
+                    X = STM_bj.get_displacement(self.G, **self.conf).ravel()
+                    if self.check_raw_G.get(): X = np.vstack([X, self.G.ravel()])
+                    if self.check_raw_logG.get(): X = np.vstack([X, np.log10(np.abs(self.G)).ravel()])
+                    np.savetxt(path, X.T, delimiter=",")
+                case 2:
+                    G = np.log10(np.abs(self.hist_G.x_bins)) if self.conf['G_scale'] == 'log' else self.hist_G.x_bins
+                    G = (G[1:] + G[:-1]) / 2
+                    count = self.hist_G.height_per_trace if self.check_1D_pertraces.get() else self.hist_G.height
+                    np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
+                case 3:
+                    count = self.hist_GS.height_per_trace.T if self.check_2D_pertraces.get() else self.hist_GS.height.T
+                    if self.check_2D_axis.get():
+                        df = pd.DataFrame(count)
+                        X = np.log10(np.abs(self.hist_GS.x_bins)) if self.conf['X_scale'] == 'log' else self.hist_GS.x_bins
+                        G = np.log10(np.abs(self.hist_GS.y_bins)) if self.conf['G_scale'] == 'log' else self.hist_GS.y_bins
+                        df.columns = (X[1:] + X[:-1]) / 2
+                        df.index = (G[1:] + G[:-1]) / 2
+                        df.to_csv(path, sep=',')
+                    else:
+                        np.savetxt(path, count, delimiter=",")
 
 
 if __name__ == '__main__':

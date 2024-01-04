@@ -1,4 +1,5 @@
 import atexit
+import glob
 import io
 import multiprocessing
 import os
@@ -104,13 +105,14 @@ def __read_text(byte: bytes, delimiter='\t'):
     return pd.read_csv(io.BytesIO(byte), delimiter=delimiter, dtype=np.float64, header=None).values.T.squeeze()
 
 
-def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_count(), **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_count(), recursive: bool = False, **kwargs) -> tuple[np.ndarray, np.ndarray]:
     """
     Load data from text files.
 
     Args:
         path (str): directory of files, zip file, or txt file
         threads (int, optional): number of CPU threads to use, default use all
+        recursive (bool, optional): read txt files in folder recursively
 
     Returns:
         out (ndarray): Data read from the text files.
@@ -123,7 +125,7 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
         return np.loadtxt(path, unpack=True)
     else:
         if os.path.isdir(path):
-            files = filter(lambda file: file.endswith('.txt'), os.listdir(path))
+            files = glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)
             files = [open(os.path.join(path, file), 'rb').read() for file in files]
             if files:
                 with multiprocessing.Pool(threads) as pool:
@@ -155,15 +157,16 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: float, x_scale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], num_x_bin: float, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
-        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if x_scale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if x_scale == 'log' else None
+        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
+        self.xscale = xscale
         self.fig, self.ax = plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
-        self.ax.set_xscale(x_scale)
+        self.ax.set_xscale(xscale)
         self.ax.grid(visible=True, which='major')
 
     @property
@@ -218,6 +221,8 @@ class Hist2D:
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
         self.height, *_ = np.histogram2d([], [], (self.x_bins, self.y_bins))
         self.trace = 0
+        self.xscale = xscale
+        self.yscale = yscale
         self.fig, self.ax = plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
