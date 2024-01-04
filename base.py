@@ -6,20 +6,20 @@ import time
 from abc import abstractmethod
 from typing import Literal, Union
 from zipfile import ZipFile
-import matplotlib
-from matplotlib.colors import LinearSegmentedColormap
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.optimize
 import scipy.signal
+from matplotlib.colors import LinearSegmentedColormap
 from scipy.constants import physical_constants
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-px = 1 / plt.rcParams['figure.dpi']
 matplotlib.rc('font', size=16)
+matplotlib.rc("figure", autolayout=True)
 cmap = LinearSegmentedColormap('Cmap',
                                segmentdata={
                                    'red': [[0, 1, 1], [0.05, 0, 0], [0.1, 0, 0], [0.15, 1, 1], [0.3, 1, 1], [1, 1, 1]],
@@ -160,7 +160,7 @@ class Hist1D:
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if x_scale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if x_scale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
-        self.fig, self.ax = plt.subplots(figsize=(800 * px, 600 * px))
+        self.fig, self.ax = plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(x_scale)
@@ -218,7 +218,7 @@ class Hist2D:
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
         self.height, *_ = np.histogram2d([], [], (self.x_bins, self.y_bins))
         self.trace = 0
-        self.fig, self.ax = plt.subplots(figsize=(800 * px, 600 * px))
+        self.fig, self.ax = plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)
