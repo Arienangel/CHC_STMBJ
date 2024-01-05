@@ -134,7 +134,7 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
                 return None
         elif path.endswith('zip'):
             with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
-                files = filter(lambda file: file.endswith('.txt') and '/' not in file, zf.namelist())
+                files = filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())
                 files = map(zf.read, files)
                 return np.concatenate(pool.map(__read_text, files), axis=-1)
 
