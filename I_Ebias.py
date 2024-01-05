@@ -3,7 +3,7 @@ from typing import Literal, Union
 import numpy as np
 import scipy.signal
 
-from base import *
+from baseclass import *
 
 
 def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, length: int = 1200, offset: list = [0, 0], units: list = [1e-6, 1], **kwargs) -> tuple[np.ndarray, np.ndarray]:
