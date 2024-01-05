@@ -118,7 +118,7 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
         out (ndarray): Data read from the text files.
     """
     if isinstance(path, list):
-        return np.concatenate(list(map(load_data, path)), axis=-1)
+        return np.concatenate(list(map(lambda path: load_data(path, threads, recursive), path)), axis=-1)
     if path.endswith('.npy'):
         return np.load(path)
     if path.endswith('.txt'):
@@ -168,6 +168,7 @@ class Hist1D:
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
         self.ax.grid(visible=True, which='major')
+        self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
 
     @property
     def height_per_trace(self):
@@ -230,6 +231,8 @@ class Hist2D:
         self.ax.set_xscale(xscale)
         self.ax.set_yscale(yscale)
         self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
+        self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
+        self.y = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if yscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
 
     @property
     def height_per_trace(self):

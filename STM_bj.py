@@ -63,8 +63,8 @@ class Hist_G(Hist1D):
 
     def __init__(self, xlim: tuple[float, float] = (1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
         super().__init__(xlim, num_bin, x_scale, **kwargs)
-        self.ax.set_xlabel('$Conductance\/(G/G_0)$')
-        self.ax.set_ylabel('$Count/trace$')
+        self.ax.set_xlabel('Conductance ($G/G_0$)')
+        self.ax.set_ylabel('Count/trace')
 
     def add_data(self, G: np.ndarray, **kwargs) -> None:
         """
@@ -112,9 +112,9 @@ class Hist_GS(Hist2D):
                  x_conversion: float = 800,
                  **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('$Displacement\/(nm)$')
-        self.ax.set_ylabel('$Conductance\/(G/G_0)$')
-        self.colorbar.set_label('$Count/trace$')
+        self.ax.set_xlabel('Displacement (nm)')
+        self.ax.set_ylabel('Conductance ($G/G_0$)')
+        self.colorbar.set_label('Count/trace')
         self.zero_point = zero_point
         self.x_conversion = x_conversion
 

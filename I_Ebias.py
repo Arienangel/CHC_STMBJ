@@ -7,25 +7,27 @@ import yaml
 from base import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, length: int = 1200, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, length: int = 1200, offset: list = [0, 0], units: list = [1e-6, 1], **kwargs) -> tuple[np.ndarray, np.ndarray]:
     '''
     Extract traces from raw_data
 
     Args:
-        raw_data (ndarray | str): 1D array contains raw data, directory of files, zip file, or txt file
+        raw_data (ndarray | str): 2D array (I, V) contains raw data, directory of files, zip file, or txt file
         height (float, optional): peak height of E bias
         length (int, optional): length of trace
+        offset (list, optional): offset length to first peak and final peak
+        units (list, optional): default: (μA, V)
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
         V (ndarray): E bias (V) in 2D array (#traces, length)
     '''
-    if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
-    V, I = raw_data * np.array([[1], [1e-6]])
+    if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
+    I, V = raw_data * np.expand_dims(units, 1)
     peaks, *_ = scipy.signal.find_peaks(abs(V), height=height)
     start, end = peaks[:-1].ravel(), peaks[1:].ravel()
-    filter = (end - start) == length
-    if filter.size >= 2: return np.stack([[I[i:j], V[i:j]] for i, j in zip(start[filter], end[filter])], axis=1)
+    f = list(map(lambda x: x + length - sum(offset) in end, start))
+    if len(f) >= 1: return np.stack([[I[i:j], V[i:j]] for i, j in zip(start[f] - offset[0], start[f] - offset[0] + length)], axis=1)
     else: return np.empty((2, 0, length))
 
 
@@ -92,8 +94,8 @@ class Hist_GV(Hist2D):
     def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-5, 1e-1), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{bias}\/(V)$')
-        self.ax.set_ylabel('$Conductance\/(G/G_0)$')
-        self.colorbar.set_label('$Count/trace$')
+        self.ax.set_ylabel('Conductance ($G/G_0$)')
+        self.colorbar.set_label('Count/trace')
 
     def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
         """
@@ -112,8 +114,8 @@ class Hist_IV(Hist2D):
     def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-11, 1e-5), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{bias}\/(V)$')
-        self.ax.set_ylabel('$Current\/(A)$')
-        self.colorbar.set_label('$Count/trace$')
+        self.ax.set_ylabel('Current (A)')
+        self.colorbar.set_label('Count/trace')
 
     def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
         """
@@ -140,11 +142,11 @@ class Run(Base_Runner):
         hist_IV (Hist_IV)
     """
 
-    def __init__(self, path: str, segment: int = 4, num_file: int = 10, noise_remove: bool = True, zeroing: bool = False, **kwargs) -> None:
+    def __init__(self, path: str, num_segments: int = 4, num_files: int = 10, noise_remove: bool = True, zeroing: bool = False, **kwargs) -> None:
         self.hist_GV = Hist_GV(**conf['hist_GV'])
         self.hist_IV = Hist_IV(**conf['hist_IV'])
-        self.segment = segment
-        self.num_file = num_file
+        self.num_segments = num_segments
+        self.num_files = num_files
         self.noise_remove = noise_remove
         self.zeroing = zeroing
         self.pending = []
@@ -154,8 +156,8 @@ class Run(Base_Runner):
         if os.path.isdir(path):
             if not os.listdir(path): return  # empty directory
         self.pending.append(path)
-        I, V = extract_data(self.pending[-self.num_file:], **conf['extract_data'])
-        if I.shape[0] < self.segment:
+        I, V = extract_data(self.pending[-self.num_files:], **conf['extract_data'])
+        if I.shape[0] < self.num_segments:
             return
         else:
             if self.noise_remove: I, V = noise_remove(I, V, **conf['noise_remove'])
