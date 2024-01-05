@@ -5,10 +5,10 @@ import os
 import sys
 import time
 import tkinter as tk
-from tkinter import ttk
 import tkinter.constants
 import tkinter.filedialog
 import tkinter.messagebox
+from tkinter import ttk
 
 import matplotlib
 import matplotlib.axes
@@ -20,8 +20,8 @@ from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-import STM_bj
 import I_Ebias
+import STM_bj
 
 
 class Main:
@@ -36,7 +36,7 @@ class Main:
         tk.OptionMenu(frame, tk.StringVar(value='Select'), *['STM-bj', 'I-Ebias'], command=self.new_tab).pack(side='left')
         tk.Label(frame, text='Tab name: ').pack(side='left')
         self.tab_name = tk.StringVar()
-        tk.Entry(frame, textvariable=self.tab_name, width=10, justify='center').pack(side='left')
+        tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
         tk.Button(frame, text='Apply', command=lambda: self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.tab_name.get())).pack(side='left')
         global CPU_threads
         CPU_threads = tk.IntVar(value=multiprocessing.cpu_count())
@@ -308,8 +308,8 @@ class I_Ebias_GUI(FileSystemEventHandler):
         # row 0
         self.directory_path = tk.StringVar()
         self.directory_recursive = tk.BooleanVar(value=False)
-        self.num_files = tk.IntVar(value=10)
-        self.num_segments = tk.IntVar(value=4)
+        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
+        self.num_segments = tk.IntVar(value=4)  # number of segments in one cycle
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=2)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=50).grid(row=0, column=3, columnspan=3)
         tk.Label(self.frame_config, text='#Segments in\nlast #Files: ').grid(row=0, column=0)

@@ -2,7 +2,6 @@ from typing import Literal, Union
 
 import numpy as np
 import scipy.signal
-import yaml
 
 from base import *
 
@@ -126,61 +125,3 @@ class Hist_IV(Hist2D):
             V (ndarray): 2D Ebias array with shape (trace, length)
         """
         super().add_data(V, np.abs(I), **kwargs)
-
-
-class Run(Base_Runner):
-    """
-    Load data and plot
-
-    Args:
-        path (str): directory of files, or txt file
-        segment (int): number of segments in one cycle
-        num_file (int): number of files to finish one cycle
-
-    Attributes:
-        hist_GV (Hist_GV)
-        hist_IV (Hist_IV)
-    """
-
-    def __init__(self, path: str, num_segments: int = 4, num_files: int = 10, noise_remove: bool = True, zeroing: bool = False, **kwargs) -> None:
-        self.hist_GV = Hist_GV(**conf['hist_GV'])
-        self.hist_IV = Hist_IV(**conf['hist_IV'])
-        self.num_segments = num_segments
-        self.num_files = num_files
-        self.noise_remove = noise_remove
-        self.zeroing = zeroing
-        self.pending = []
-        super().__init__(path, **kwargs)
-
-    def add_data(self, path: str, **kwargs) -> None:
-        if os.path.isdir(path):
-            if not os.listdir(path): return  # empty directory
-        self.pending.append(path)
-        I, V = extract_data(self.pending[-self.num_files:], **conf['extract_data'])
-        if I.shape[0] < self.num_segments:
-            return
-        else:
-            if self.noise_remove: I, V = noise_remove(I, V, **conf['noise_remove'])
-            if self.zeroing: I, V = zeroing(I, V)
-            if I.size:
-                self.hist_GV.add_data(I, V)
-                self.hist_IV.add_data(I, V)
-                print(f'Traces: {self.hist_GV.trace}')
-            self.pending.clear()
-
-
-if __name__ == '__main__':
-    if os.path.exists('config.yaml'):
-        with open('config.yaml', mode='r', encoding='utf-8') as f:
-            conf = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['I_Ebias']
-
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path")
-    args = parser.parse_args()
-    if args.path:
-        conf['path'] = args.path
-
-    runner = Run(**conf)
-    if conf['realtime']: runner.plot_realtime()
-    else: runner.plot_once()

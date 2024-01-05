@@ -1,10 +1,7 @@
-import atexit
 import glob
 import io
 import multiprocessing
 import os
-import time
-from abc import abstractmethod
 from typing import Literal, Union
 from zipfile import ZipFile
 
@@ -16,8 +13,6 @@ import scipy.optimize
 import scipy.signal
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.constants import physical_constants
-from watchdog.events import FileCreatedEvent, FileSystemEventHandler
-from watchdog.observers import Observer
 
 matplotlib.rc('font', size=16)
 matplotlib.rc("figure", autolayout=True)
@@ -257,71 +252,3 @@ class Hist2D:
         self.trace = 0
         self.height.fill(0)
         self.plot.set_array(self.height.T)
-
-
-class Base_Runner(FileSystemEventHandler):
-    """
-    Load data and plot
-
-    Args:
-        path (str): directory of files, or txt file
-    """
-
-    def __init__(self, path: str, **kwargs) -> None:
-        self.path = path.strip('"')
-        self.add_data(self.path)
-
-    def plot_realtime(self, pause=0.5, recursive: bool = False) -> None:
-        """
-        Plot data and updatee in realtime
-
-        Args:
-            pause (float, optional): plt.pause() interval
-            recursive (bool): detect new file in subdirectory or not
-        """
-        if not os.path.isdir(self.path): raise ValueError(f'Path is not a directory: {self.path}')
-        observer = Observer()
-        observer.schedule(self, path=self.path, recursive=recursive)
-        observer.start()
-        plt.show(block=False)
-        atexit.register(plt.close)
-        atexit.register(observer.stop)
-        print(f'Monitoring directory: {self.path}')
-        while True:
-            try:
-                plt.pause(pause)
-            except KeyboardInterrupt:
-                return
-
-    def plot_once(self) -> None:
-        """
-        Plot data once.
-        """
-        try:
-            plt.show(block=True)
-        except KeyboardInterrupt:
-            return
-
-    def on_created(self, event):
-        if isinstance(event, FileCreatedEvent):
-            if (event.src_path.endswith('.txt')):
-                try:
-                    if os.path.getsize(event.src_path) == 0: time.sleep(0.5)
-                    self.add_data(event.src_path)
-                except Exception as E:
-                    print(f'ERROR: {type(E).__name__}: {E.args}')
-
-    @abstractmethod
-    def add_data(self, path: str, **kwargs) -> None:
-        """
-        Called when on_created() detected new file
-
-        Args:
-            path (str): directory of files, zip file, or txt file
-        """
-
-    @abstractmethod
-    def clear_data(self, **kwargs) -> None:
-        """
-        Clear all data
-        """

@@ -1,11 +1,9 @@
-import os
 from typing import Literal, Union
 
 import numpy as np
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
-import yaml
 
 from base import *
 
@@ -127,46 +125,3 @@ class Hist_GS(Hist2D):
         """
         x = get_displacement(G, zero_point=self.zero_point, x_conversion=self.x_conversion)
         super().add_data(x, G, **kwargs)
-
-
-class Run(Base_Runner):
-    """
-    Load data and plot
-
-    Args:
-        path (str): directory of files, or txt file
-
-    Attributes:
-        hist_G (Hist_G)
-        hist_GS (Hist_GS)
-    """
-
-    def __init__(self, path: str, **kwargs) -> None:
-        self.hist_G = Hist_G(**conf['hist_G'])
-        self.hist_GS = Hist_GS(**conf['hist_GS'])
-        super().__init__(path, **kwargs)
-
-    def add_data(self, path: str, **kwargs) -> None:
-        print(f'File detected: {path}')
-        if os.path.isdir(path):
-            if not os.listdir(path): return  # empty directory
-        extracted = extract_data(path, **conf['extract_data'])
-        self.hist_G.add_data(extracted)
-        self.hist_GS.add_data(extracted)
-        print(f'Traces: {self.hist_G.trace}')
-
-
-if __name__ == '__main__':
-    if os.path.exists('config.yaml'):
-        with open('config.yaml', mode='r', encoding='utf-8') as f:
-            conf = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['STM_bj']
-
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--path")
-    args = parser.parse_args()
-    if args.path: conf['path'] = args.path
-
-    runner = Run(**conf)
-    if conf['realtime']: runner.plot_realtime()
-    else: runner.plot_once()
