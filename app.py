@@ -217,7 +217,8 @@ class STM_bj_GUI(FileSystemEventHandler):
     def add_data(self, path: str | list):
         if isinstance(path, str):
             self.status_last_file.config(text=path)
-            if not os.listdir(path): return  # empty directory
+            if os.path.isdir(path):
+                if not os.listdir(path): return  # empty directory
         else:
             self.status_last_file.config(text="(Multiple)")
         try:
@@ -481,7 +482,8 @@ class I_Ebias_GUI(FileSystemEventHandler):
     def add_data(self, path: str | list):
         if isinstance(path, str):
             self.status_last_file.config(text=path)
-            if not os.listdir(path): return  # empty directory
+            if os.path.isdir(path):
+                if not os.listdir(path): return  # empty directory
         else:
             self.status_last_file.config(text="(Multiple)")
         self.pending.append(path)
