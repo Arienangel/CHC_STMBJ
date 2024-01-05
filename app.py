@@ -245,50 +245,50 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.hist_G = hist_G
             self.hist_GS = hist_GS
             self.config = config
-            # col 0
-            self.export_type = tk.IntVar(value=1)
-            tk.Radiobutton(self.window, text='Raw data', variable=self.export_type, value=1).grid(row=0, column=0, sticky='w')
-            tk.Radiobutton(self.window, text='1D histogram', variable=self.export_type, value=2).grid(row=1, column=0, sticky='w')
-            tk.Radiobutton(self.window, text='2D histogram', variable=self.export_type, value=3).grid(row=2, column=0, sticky='w')
-            # row 0
+            # tab
+            self.tabcontrol = ttk.Notebook(self.window)
+            self.tabcontrol.pack(side='top')
+            tab_raw = ttk.Frame(self.tabcontrol)
+            tab_1D = ttk.Frame(self.tabcontrol)
+            tab_2D = ttk.Frame(self.tabcontrol)
+            self.tabcontrol.add(tab_raw, text='Raw data')
+            self.tabcontrol.add(tab_1D, text='1D histogram')
+            self.tabcontrol.add(tab_2D, text='2D histogram')
+            # raw
             self.check_raw_X = tk.BooleanVar(value=True)  #disabled
             self.check_raw_G = tk.BooleanVar(value=True)
             self.check_raw_logG = tk.BooleanVar(value=True)
-            tk.Checkbutton(self.window, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_G, text='G').grid(row=0, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_logG, text='logG').grid(row=0, column=3, sticky='w')
-            # row 1
+            tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2)
+            # 1D
             self.check_1D_G = tk.BooleanVar(value=True)  #disabled
-            self.check_1D_count = tk.BooleanVar(value=True)  #disabled
-            self.check_1D_pertraces = tk.BooleanVar(value=False)
-            tk.Checkbutton(self.window, variable=self.check_1D_G, text='G', state='disabled').grid(row=1, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_1D_count, text='Count', state='disabled').grid(row=1, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_1D_pertraces, text='per traces').grid(row=1, column=3, sticky='w')
-            # row 2
+            self.option_1D_count = tk.StringVar(value='Count')
+            tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0)
+            tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+            # 2D
             self.check_2D_axis = tk.BooleanVar(value=False)
-            self.check_2D_count = tk.BooleanVar(value=True)  #disabled
-            self.check_2D_pertraces = tk.BooleanVar(value=False)
-            tk.Checkbutton(self.window, variable=self.check_2D_axis, text='Axis').grid(row=2, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_2D_count, text='Count', state='disabled').grid(row=2, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_2D_pertraces, text='per traces').grid(row=2, column=3, sticky='w')
-            # row 3
-            tk.Button(self.window, text='Export', command=self.run).grid(row=3, columnspan=4)
+            self.option_2D_count = tk.StringVar(value='Count')
+            tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0)
+            tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+            # button
+            tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
         def run(self):
             path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
             if path:
-                match self.export_type.get():
-                    case 1:
+                match self.tabcontrol.index('current'):
+                    case 0:
                         A = STM_bj.get_displacement(self.G, **self.config).ravel()
                         if self.check_raw_G.get(): A = np.vstack([A, self.G.ravel()])
                         if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.G)).ravel()])
                         np.savetxt(path, A.T, delimiter=",")
-                    case 2:
+                    case 1:
                         G = np.log10(np.abs(self.hist_G.x)) if self.config['G_scale'] == 'log' else self.hist_G.x
-                        count = self.hist_G.height_per_trace if self.check_1D_pertraces.get() else self.hist_G.height
+                        count = self.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.hist_G.height
                         np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
-                    case 3:
-                        count = self.hist_GS.height_per_trace.T if self.check_2D_pertraces.get() else self.hist_GS.height.T
+                    case 2:
+                        count = self.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.hist_GS.height.T
                         if self.check_2D_axis.get():
                             df = pd.DataFrame(count)
                             df.columns = np.log10(np.abs(self.hist_GS.x)) if self.config['X_scale'] == 'log' else self.hist_GS.x
@@ -523,47 +523,46 @@ class I_Ebias_GUI(FileSystemEventHandler):
             self.hist_GV = hist_GV
             self.hist_IV = hist_IV
             self.conf = conf
-            # col 0
-            self.export_type = tk.IntVar(value=1)
-            tk.Radiobutton(self.window, text='Raw data', variable=self.export_type, value=1).grid(row=0, column=0, rowspan=2, sticky='w')
-            tk.Radiobutton(self.window, text='GV histogram', variable=self.export_type, value=2).grid(row=2, column=0, sticky='w')
-            tk.Radiobutton(self.window, text='IV histogram', variable=self.export_type, value=3).grid(row=3, column=0, sticky='w')
-            # row 0
+            # tab
+            self.tabcontrol = ttk.Notebook(self.window)
+            self.tabcontrol.pack(side='top')
+            tab_raw = ttk.Frame(self.tabcontrol)
+            tab_GV = ttk.Frame(self.tabcontrol)
+            tab_IV = ttk.Frame(self.tabcontrol)
+            self.tabcontrol.add(tab_raw, text='Raw data')
+            self.tabcontrol.add(tab_GV, text='GV histogram')
+            self.tabcontrol.add(tab_IV, text='IV histogram')
+            # raw
             self.check_raw_V = tk.BooleanVar(value=True)  #disabled
             self.check_raw_G = tk.BooleanVar(value=False)
             self.check_raw_logG = tk.BooleanVar(value=True)
-            tk.Checkbutton(self.window, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_G, text='G').grid(row=0, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_logG, text='logG').grid(row=0, column=3, sticky='w')
-            # row 1
             self.check_raw_I = tk.BooleanVar(value=False)
             self.check_raw_absI = tk.BooleanVar(value=False)
             self.check_raw_logI = tk.BooleanVar(value=True)
-            tk.Checkbutton(self.window, variable=self.check_raw_I, text='I').grid(row=1, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_raw_logI, text='logI').grid(row=1, column=3, sticky='w')
-            # row 2
+            tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_I, text='I').grid(row=1, column=1)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2)
+            tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3)
+            # GV
             self.check_GV_axis = tk.BooleanVar(value=False)
-            self.check_GV_count = tk.BooleanVar(value=True)  #disabled
-            self.check_GV_pertraces = tk.BooleanVar(value=False)
-            tk.Checkbutton(self.window, variable=self.check_GV_axis, text='Axis').grid(row=2, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_GV_count, text='Count', state='disabled').grid(row=2, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_GV_pertraces, text='per traces').grid(row=2, column=3, sticky='w')
-            # row 3
+            self.option_GV_count = tk.StringVar(value='Count')
+            tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0)
+            tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+            # IV
             self.check_IV_axis = tk.BooleanVar(value=False)
-            self.check_IV_count = tk.BooleanVar(value=True)  #disabled
-            self.check_IV_pertraces = tk.BooleanVar(value=False)
-            tk.Checkbutton(self.window, variable=self.check_IV_axis, text='Axis').grid(row=3, column=1, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_IV_count, text='Count', state='disabled').grid(row=3, column=2, sticky='w')
-            tk.Checkbutton(self.window, variable=self.check_IV_pertraces, text='per traces').grid(row=3, column=3, sticky='w')
-            # row 4
-            tk.Button(self.window, text='Export', command=self.run).grid(row=4, columnspan=4)
+            self.option_IV_count = tk.StringVar(value='Count')
+            tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0)
+            tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+            # button
+            tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
         def run(self):
             path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
             if path:
-                match self.export_type.get():
-                    case 1:
+                match self.tabcontrol.index('current'):
+                    case 0:
                         A = self.V.ravel()
                         if self.check_raw_I.get(): A = np.vstack([A, self.I.ravel()])
                         if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.I.ravel())])
@@ -572,8 +571,8 @@ class I_Ebias_GUI(FileSystemEventHandler):
                         if self.check_raw_G.get(): A = np.vstack([A, G])
                         if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
                         np.savetxt(path, A.T, delimiter=",")
-                    case 2:
-                        count = self.hist_GV.height_per_trace.T if self.check_GV_pertraces.get() else self.hist_GV.height.T
+                    case 1:
+                        count = self.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.hist_GV.height.T
                         if self.check_GV_axis.get():
                             df = pd.DataFrame(count)
                             df.columns = np.log10(np.abs(self.hist_GV.x)) if self.conf['V_scale'] == 'log' else self.hist_GV.x
@@ -581,8 +580,8 @@ class I_Ebias_GUI(FileSystemEventHandler):
                             df.to_csv(path, sep=',')
                         else:
                             np.savetxt(path, count, delimiter=",")
-                    case 3:
-                        count = self.hist_IV.height_per_trace.T if self.check_IV_pertraces.get() else self.hist_IV.height.T
+                    case 2:
+                        count = self.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.hist_IV.height.T
                         if self.check_IV_axis.get():
                             df = pd.DataFrame(count)
                             df.columns = np.log10(np.abs(self.hist_IV.x)) if self.conf['V_scale'] == 'log' else self.hist_IV.x
