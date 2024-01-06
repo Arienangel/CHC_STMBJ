@@ -1,6 +1,7 @@
 from typing import Literal, Union
 
 import numpy as np
+import pandas as pd
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
@@ -8,7 +9,7 @@ import scipy.signal
 from baseclass import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', **kwargs) -> np.ndarray:
+def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', limit_ratio: tuple[float, float] = (0, 0), **kwargs) -> np.ndarray:
     '''
     Extract useful data from raw_data
 
@@ -18,16 +19,17 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         upper (float): extract data greater than upper limit
         lower (float): extract data less than lower limit
         method (str): 'pull', 'crash' or 'both'
+        limit_ratio (tuple): ratio of extract data should be greater than upper limit or lower than lower limit
 
     Returns:
         extracted_data (ndarray): 2D array with shape (trace, length)
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper + lower) / 2, 1, 0))), distance=length)
+        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
         if len(step):
             split = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in step])
-            res = split[np.where((split.max(axis=1) > upper) & (split.min(axis=1) < lower), True, False)]
+            res = split[(np.where(split > upper, 1, 0).sum(axis=1) > limit_ratio[0] * length) & (np.where(split < lower, 1, 0).sum(axis=1) > limit_ratio[1] * length)]
             if method == 'pull': return res[np.where((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper), True, False)]
             elif method == 'crash': return res[np.where((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower), True, False)]
             elif method == 'both': return res[np.where(((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper)) | ((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower)), True, False)]
@@ -47,14 +49,14 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
         x (ndarray): 2D x array with shape (trace, length)
     """
     is_pull = G[:, 0] > G[:, -1]
-    _, x = np.mgrid[:G.shape[0], :G.shape[-1]]
-    n, x1 = np.where(((G[:, :-1] > zero_point) & (G[:, 1:] < zero_point) & np.expand_dims(is_pull, axis=-1)) | ((G[:, :-1] < zero_point) & (G[:, 1:] > zero_point) & np.expand_dims(~is_pull, axis=-1)))
-    _, start, count = np.unique(n, return_counts=True, return_index=True)
-    x1 = x1[start + (count - 1) * np.where(is_pull, 1, 0)]
+    _, X = np.mgrid[:G.shape[0], :G.shape[-1]]
+    row, col = np.where(((G[:, :-1] > zero_point) & (G[:, 1:] < zero_point) & np.expand_dims(is_pull, axis=-1)) | ((G[:, :-1] < zero_point) & (G[:, 1:] > zero_point) & np.expand_dims(~is_pull, axis=-1)))
+    x_min, x_max = pd.DataFrame([row, col]).transpose().groupby(0).agg(['min', 'max']).values.T
+    x1 = np.where(is_pull, x_max, x_min)
     x2 = x1 + 1
     y1, y2 = G[:, x1].diagonal(), G[:, x2].diagonal()
-    zero_point = x1 + (zero_point - y1) / (y2 - y1) * (x2 - x1)
-    return (x - np.expand_dims(zero_point, axis=-1)) / x_conversion
+    x = x1 + (zero_point - y1) / (y2 - y1) * (x2 - x1)
+    return (X - np.expand_dims(x, axis=-1)) / x_conversion
 
 
 class Hist_G(Hist1D):

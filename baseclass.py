@@ -100,7 +100,7 @@ def __read_text(byte: bytes, delimiter='\t'):
     return pd.read_csv(io.BytesIO(byte), delimiter=delimiter, dtype=np.float64, header=None).values.T.squeeze()
 
 
-def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_count(), recursive: bool = False, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_count(), recursive: bool = False, **kwargs) -> np.ndarray:
     """
     Load data from text files.
 
@@ -170,18 +170,20 @@ class Hist1D:
         """ndarray: histogram height divided by number of traces"""
         return self.height / self.trace
 
-    def add_data(self, x: np.ndarray, **kwargs) -> None:
+    def add_data(self, x: np.ndarray, set_ylim: bool = True, **kwargs) -> None:
         """
         Add data into histogram
 
         Args:
             x (ndarray): 2D array with shape (trace, length)
+            set_ylim (bool, optional): set largest y as y max
         """
         self.trace = self.trace + x.shape[0]
         self.height = self.height + np.histogram(x, self.x_bins)[0]
         height_per_trace = self.height_per_trace
         self.plot.set_data(height_per_trace)
-        self.ax.set_ylim(0, height_per_trace.max())
+        if set_ylim:
+            self.ax.set_ylim(0, height_per_trace.max())
 
     def clear_data(self):
         self.trace = 0
@@ -234,19 +236,21 @@ class Hist2D:
         """ndarray: histogram height devided by trace"""
         return self.height / self.trace
 
-    def add_data(self, x: np.ndarray, y: np.ndarray, **kwargs) -> None:
+    def add_data(self, x: np.ndarray, y: np.ndarray, set_clim: bool = True, **kwargs) -> None:
         """
         Add data into histogram
 
         Args:
             x (ndarray): 2D x array with shape (trace, length)
             y (ndarray): 2D y array with shape (trace, length)
+            set_clim (bool, optional): set largest z as z max
         """
         self.trace = self.trace + x.shape[0]
         self.height = self.height + np.histogram2d(x.ravel(), y.ravel(), (self.x_bins, self.y_bins))[0]
         height_per_trace = self.height_per_trace
         self.plot.set_array(height_per_trace.T)
-        self.plot.set_clim(0, height_per_trace.max())
+        if set_clim:
+            self.plot.set_clim(0, height_per_trace.max())
 
     def clear_data(self):
         self.trace = 0
