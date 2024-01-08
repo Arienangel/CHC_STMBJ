@@ -29,9 +29,13 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
         if len(index):
             split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
-            if method == 'pull': return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
-            elif method == 'crash': return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
-            elif method == 'both': return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
+            match method:
+                case 'pull':
+                    return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
+                case 'crash':
+                    return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
+                case 'both':
+                    return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
 

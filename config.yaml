@@ -1,0 +1,45 @@
+"STM_bj":
+  "Data type": "raw" # raw, cut
+  "Recursive": false # true, false
+  "Length": 2000
+  "G upper": 3.2
+  "G lower": 0.000001
+  "X=0@G=": 0.5
+  "Points/nm": 800
+  "Direction": "pull" # pull, crash, both
+  "G min": 0.00001
+  "G max": 3.16
+  "G #bins": 550
+  "G scale": "log" # linear log
+  "X min": -0.4
+  "X max": 0.6
+  "X #bins": 1000
+  "X scale": "linear" # linear log
+  "Colorbar": '{"red":[[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],"green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],"blue":[[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}'
+
+"I-Ebias":
+  "Data type": "raw" # raw, cut
+  "Recursive": false # true, false
+  "#Segments": 4
+  "#Files": 10
+  "V upper": 1.45
+  "Length": 1200
+  "I unit": 0.000001
+  "V unit": 1
+  "I min@V<": 0.1
+  "I limit": 0.00001
+  "Zeroing": true # true, false
+  "Direction": "both" # both, -→+, +→-
+  "V min": -1.5
+  "V max": 1.5
+  "V #bins": 300
+  "V scale": "linear"
+  "G min": 0.00001
+  "G max": 0.1
+  "G #bins": 400
+  "G scale": "log"
+  "I min": 0.00000000001
+  "I max": 0.00001
+  "I #bins": 600
+  "I scale": "log"
+  "Colorbar": '{"red":[[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],"green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],"blue":[[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}'

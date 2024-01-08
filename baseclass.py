@@ -114,24 +114,23 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
     """
     if isinstance(path, list):
         return np.concatenate(list(map(lambda path: load_data(path, threads, recursive), path)), axis=-1)
-    if path.endswith('.npy'):
-        return np.load(path)
-    if path.endswith('.txt'):
+    elif path.endswith('.txt'):
         return np.loadtxt(path, unpack=True)
-    else:
-        if os.path.isdir(path):
-            files = glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)
-            files = [open(os.path.join(path, file), 'rb').read() for file in files]
-            if files:
-                with multiprocessing.Pool(threads) as pool:
-                    return np.concatenate(pool.map(__read_text, files), axis=-1)
-            else:
-                return None
-        elif path.endswith('zip'):
-            with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
-                files = filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())
-                files = map(zf.read, files)
+    elif path.endswith('.npy'):
+        return np.load(path)
+    elif os.path.isdir(path):
+        files = glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)
+        files = [open(os.path.join(path, file), 'rb').read() for file in files]
+        if files:
+            with multiprocessing.Pool(threads) as pool:
                 return np.concatenate(pool.map(__read_text, files), axis=-1)
+        else:
+            return None
+    elif path.endswith('zip'):
+        with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
+            files = filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())
+            files = map(zf.read, files)
+            return np.concatenate(pool.map(__read_text, files), axis=-1)
 
 
 class Hist1D:

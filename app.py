@@ -14,6 +14,7 @@ import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
@@ -102,14 +103,14 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.extract_length = tk.IntVar(value=2000)
         self.upper = tk.DoubleVar(value=3.2)
         self.lower = tk.DoubleVar(value=1e-6)
-        self.is_raw = tk.BooleanVar(value=True)
+        self.is_raw = tk.StringVar(value='raw')
         tk.Label(self.frame_config, text='Length: ').grid(row=1, column=0)
         tk.Entry(self.frame_config, textvariable=self.extract_length, justify='center').grid(row=1, column=1)
         tk.Label(self.frame_config, text='G upper: ').grid(row=1, column=2)
         tk.Entry(self.frame_config, textvariable=self.upper, justify='center').grid(row=1, column=3)
         tk.Label(self.frame_config, text='G lower: ').grid(row=1, column=4)
         tk.Entry(self.frame_config, textvariable=self.lower, justify='center').grid(row=1, column=5)
-        tk.Checkbutton(self.frame_config, variable=self.is_raw, text="Raw").grid(row=1, column=6, sticky='w')
+        tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
         # row 2
         self.zero_point = tk.DoubleVar(value=0.5)
@@ -151,10 +152,11 @@ class STM_bj_GUI(FileSystemEventHandler):
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=5, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
         self.colorbar_conf.grid(row=5, column=1, columnspan=5, sticky='w')
-        self.colorbar_conf.insert('0.0', '{"red":  [[0, 1, 1],[0.05, 0, 0],[0.1, 0, 0],[0.15, 1, 1],[0.3, 1, 1],[1, 1, 1]],\n "green":[[0, 1, 1],[0.05, 0, 0],[0.1, 1, 1],[0.15, 1, 1],[0.3, 0, 0],[1, 0, 0]],\n "blue": [[0, 1, 1],[0.05, 1, 1],[0.1, 0, 0],[0.15, 0, 0],[0.3, 0, 0],[1, 1, 1]]}')
+        self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=5, column=6, padx=10)
         self.is_run = False
+        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=5, column=7)
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -211,7 +213,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 'recursive': self.directory_recursive.get()
             }
             self.add_data(path)
-            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=5, column=7, padx=10)
+            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=5, column=8)
             if isinstance(path, list): return
             self.observer = Observer()
             self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
@@ -244,9 +246,9 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.status_last_file.config(text="(Multiple)")
         try:
             match self.is_raw.get():
-                case True:
+                case 'raw':
                     extracted = STM_bj.extract_data(path, **self.run_config, threads=CPU_threads.get())
-                case False:
+                case 'cut':
                     extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
                     extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
@@ -261,6 +263,28 @@ class STM_bj_GUI(FileSystemEventHandler):
 
     def export(self):
         self.Export_prompt(self.G, self.hist_G, self.hist_GS, **self.run_config)
+
+    def import_setting(self):
+        path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+        if not path: return
+        with open(path, mode='r', encoding='utf-8') as f:
+            data = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['STM_bj']
+        settings = ['Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale', 'Data type', 'Recursive']
+        attributes = [self.extract_length, self.upper, self.lower, self.zero_point, self.points_per_nm, self.direction, self.G_min, self.G_max, self.G_bins, self.G_scale, self.X_min, self.X_max, self.X_bins, self.X_scale, self.is_raw, self.directory_recursive]
+        not_valid = list()
+        for setting, attribute in zip(settings, attributes):
+            try:
+                if setting in data: attribute.set(data[setting])
+            except Exception as E:
+                not_valid.append(setting)
+        try:
+            if 'Colorbar' in data:
+                self.colorbar_conf.delete('1.0', 'end')
+                self.colorbar_conf.insert('0.0', data['Colorbar'])
+        except Exception as E:
+            not_valid.append(setting)
+        if len(not_valid):
+            tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
     class Export_prompt:
 
@@ -340,7 +364,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.num_segments = tk.IntVar(value=4)  # number of segments in one cycle
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=2)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=50).grid(row=0, column=3, columnspan=3)
-        tk.Label(self.frame_config, text='#Segments in\nlast #Files: ').grid(row=0, column=0)
+        tk.Label(self.frame_config, text='#Segments\nin last #Files: ').grid(row=0, column=0)
         frame_folder_setting = tk.Frame(self.frame_config)
         frame_folder_setting.grid(row=0, column=1)
         tk.Entry(frame_folder_setting, textvariable=self.num_segments, justify='center', width=10).pack(side='left')
@@ -352,7 +376,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.length = tk.IntVar(value=1200)
         self.I_unit = tk.DoubleVar(value=1e-6)
         self.V_unit = tk.DoubleVar(value=1)
-        self.is_raw = tk.BooleanVar(value=True)
+        self.is_raw = tk.StringVar(value='raw')
         tk.Label(self.frame_config, text='V upper: ').grid(row=1, column=0)
         tk.Entry(self.frame_config, textvariable=self.V_upper, justify='center').grid(row=1, column=1)
         tk.Label(self.frame_config, text='Length: ').grid(row=1, column=2)
@@ -362,7 +386,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         frame_units.grid(row=1, column=5)
         tk.Entry(frame_units, textvariable=self.I_unit, justify='center', width=10).pack(side='left')
         tk.Entry(frame_units, textvariable=self.V_unit, justify='center', width=10).pack(side='left')
-        tk.Checkbutton(self.frame_config, variable=self.is_raw, text="Raw").grid(row=1, column=6, sticky='w')
+        tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
         # row 2
         self.V_range = tk.DoubleVar(value=0.1)
@@ -419,10 +443,11 @@ class I_Ebias_GUI(FileSystemEventHandler):
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
         self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
-        self.colorbar_conf.insert('0.0', '{"red":  [[0, 1, 1],[0.05, 0, 0],[0.1, 0, 0],[0.15, 1, 1],[0.3, 1, 1],[1, 1, 1]],\n "green":[[0, 1, 1],[0.05, 0, 0],[0.1, 1, 1],[0.15, 1, 1],[0.3, 0, 0],[1, 0, 0]],\n "blue": [[0, 1, 1],[0.05, 1, 1],[0.1, 0, 0],[0.15, 0, 0],[0.3, 0, 0],[1, 1, 1]]}')
+        self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
+        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -483,7 +508,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
             }
             self.pending = list()
             self.add_data(path)
-            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=6, column=7, padx=10)
+            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=6, column=8)
             if isinstance(path, list): return
             self.observer = Observer()
             self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
@@ -517,9 +542,9 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.pending.append(path)
         try:
             match self.is_raw.get():
-                case True:
+                case 'raw':
                     I, V = I_Ebias.extract_data(self.pending[-self.num_files.get():], **self.run_config, threads=CPU_threads.get())
-                case False:
+                case 'cut':
                     extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
@@ -546,6 +571,31 @@ class I_Ebias_GUI(FileSystemEventHandler):
 
     def export(self):
         self.Export_prompt(self.I, self.V, self.hist_GV, self.hist_IV, **self.run_config)
+
+    def import_setting(self):
+        path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+        if not path: return
+        with open(path, mode='r', encoding='utf-8') as f:
+            data = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['I-Ebias']
+        settings = ['#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale', 'Data type', 'Recursive']
+        attributes = [
+            self.num_segments, self.num_files, self.V_upper, self.length, self.I_unit, self.V_unit, self.V_range, self.I_limit, self.check_zeroing, self.direction, self.V_min, self.V_max, self.V_bins, self.V_scale, self.G_min, self.G_max, self.G_bins, self.G_scale, self.I_min, self.I_max,
+            self.I_bins, self.I_scale, self.is_raw, self.directory_recursive
+        ]
+        not_valid = list()
+        for setting, attribute in zip(settings, attributes):
+            try:
+                if setting in data: attribute.set(data[setting])
+            except Exception as E:
+                not_valid.append(setting)
+        try:
+            if 'Colorbar' in data:
+                self.colorbar_conf.delete('1.0', 'end')
+                self.colorbar_conf.insert('0.0', data['Colorbar'])
+        except Exception as E:
+            not_valid.append(setting)
+        if len(not_valid):
+            tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
     class Export_prompt:
 
