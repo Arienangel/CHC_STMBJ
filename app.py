@@ -29,6 +29,7 @@ class Main:
         self.window = tk.Tk()
         self.window.title('STM histogram')
         self.window.protocol("WM_DELETE_WINDOW", sys.exit)
+        self.window.resizable(False, False)
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
@@ -36,14 +37,16 @@ class Main:
         tk.Label(frame, text='Tab name: ').pack(side='left')
         self.tab_name = tk.StringVar()
         tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
-        tk.Button(frame, text='Apply', command=lambda: self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.tab_name.get())).pack(side='left')
+        tk.Button(frame, text='Apply', command=self.rename_tab).pack(side='left', padx=2)
         global CPU_threads
         CPU_threads = tk.IntVar(value=multiprocessing.cpu_count())
+        self.always_on_top = tk.BooleanVar(value=False)
         tk.Label(frame, text='CPU threads: ').pack(side='left')
         tk.Entry(frame, textvariable=CPU_threads, width=10, justify='center').pack(side='left')
+        tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
-        tk.Button(self.window, text='X', command=lambda: self.tabcontrol.forget("current")).grid(row=0, column=1, padx=10, sticky='ne')
+        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
         tk.mainloop()
 
     def new_tab(self, experiment: str):
@@ -63,6 +66,22 @@ class Main:
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
+
+    def rename_tab(self):
+        try:
+            self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.tab_name.get())
+        except:
+            return
+
+    def close_tab(self):
+        try:
+            self.tabcontrol.forget("current")
+        except:
+            return
+
+    def on_top(self):
+        self.window.attributes('-topmost', self.always_on_top.get())
+        self.window.update()
 
 
 class STM_bj_GUI(FileSystemEventHandler):
@@ -249,6 +268,7 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.window = tk.Toplevel()
             self.window.grab_set()
             self.window.title('Export')
+            self.window.resizable(False, False)
             self.G = G
             self.hist_G = hist_G
             self.hist_GS = hist_GS
@@ -533,6 +553,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
             self.window = tk.Toplevel()
             self.window.grab_set()
             self.window.title('Export')
+            self.window.resizable(False, False)
             self.I = I
             self.V = V
             self.hist_GV = hist_GV

@@ -9,7 +9,7 @@ import scipy.signal
 from baseclass import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', limit_ratio: tuple[float, float] = (0, 0), **kwargs) -> np.ndarray:
+def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset: tuple[float, float] = (10, 10), **kwargs) -> np.ndarray:
     '''
     Extract useful data from raw_data
 
@@ -19,20 +19,19 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         upper (float): extract data greater than upper limit
         lower (float): extract data less than lower limit
         method (str): 'pull', 'crash' or 'both'
-        limit_ratio (tuple): ratio of extract data should be greater than upper limit or lower than lower limit
+        limit_offset (tuple): length of data in the front or end of the trace used to determine the upper/lower limit
 
     Returns:
         extracted_data (ndarray): 2D array with shape (trace, length)
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        step, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
-        if len(step):
-            split = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in step])
-            res = split[(np.where(split > upper, 1, 0).sum(axis=1) > limit_ratio[0] * length) & (np.where(split < lower, 1, 0).sum(axis=1) > limit_ratio[1] * length)]
-            if method == 'pull': return res[np.where((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper), True, False)]
-            elif method == 'crash': return res[np.where((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower), True, False)]
-            elif method == 'both': return res[np.where(((res[:, 0] > res[:, -1]) & (res[:, 0] > lower) & (res[:, -1] < upper)) | ((res[:, 0] < res[:, -1]) & (res[:, 0] < upper) & (res[:, -1] > lower)), True, False)]
+        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
+        if len(index):
+            split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
+            if method == 'pull': return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
+            elif method == 'crash': return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
+            elif method == 'both': return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
 
