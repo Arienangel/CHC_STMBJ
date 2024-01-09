@@ -157,6 +157,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.run_button.grid(row=5, column=6, padx=10)
         self.is_run = False
         tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=5, column=7)
+        tk.Button(self.frame_config, text='Export', command=self.export).grid(row=5, column=8)
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -213,7 +214,6 @@ class STM_bj_GUI(FileSystemEventHandler):
                 'recursive': self.directory_recursive.get()
             }
             self.add_data(path)
-            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=5, column=8)
             if isinstance(path, list): return
             self.observer = Observer()
             self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
@@ -262,15 +262,15 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.status_traces.config(text=self.hist_G.trace)
 
     def export(self):
-        self.Export_prompt(self.G, self.hist_G, self.hist_GS, **self.run_config)
+        STM_bj_export_prompt(self)
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
-            data = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['STM_bj']
-        settings = ['Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale', 'Data type', 'Recursive']
-        attributes = [self.extract_length, self.upper, self.lower, self.zero_point, self.points_per_nm, self.direction, self.G_min, self.G_max, self.G_bins, self.G_scale, self.X_min, self.X_max, self.X_bins, self.X_scale, self.is_raw, self.directory_recursive]
+            data = yaml.load(f.read(), yaml.SafeLoader)['STM-bj']
+        settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
+        attributes = [self.is_raw, self.directory_recursive, self.extract_length, self.upper, self.lower, self.zero_point, self.points_per_nm, self.direction, self.G_min, self.G_max, self.G_bins, self.G_scale, self.X_min, self.X_max, self.X_bins, self.X_scale]
         not_valid = list()
         for setting, attribute in zip(settings, attributes):
             try:
@@ -286,68 +286,107 @@ class STM_bj_GUI(FileSystemEventHandler):
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
-    class Export_prompt:
 
-        def __init__(self, G: np.ndarray, hist_G: STM_bj.Hist_G, hist_GS: STM_bj.Hist_GS, **config) -> None:
-            self.window = tk.Toplevel()
-            self.window.grab_set()
-            self.window.title('Export')
-            self.window.resizable(False, False)
-            self.G = G
-            self.hist_G = hist_G
-            self.hist_GS = hist_GS
-            self.config = config
-            # tab
-            self.tabcontrol = ttk.Notebook(self.window)
-            self.tabcontrol.pack(side='top')
-            tab_raw = ttk.Frame(self.tabcontrol)
-            tab_1D = ttk.Frame(self.tabcontrol)
-            tab_2D = ttk.Frame(self.tabcontrol)
-            self.tabcontrol.add(tab_raw, text='Raw data')
-            self.tabcontrol.add(tab_1D, text='1D histogram')
-            self.tabcontrol.add(tab_2D, text='2D histogram')
-            # raw
-            self.check_raw_X = tk.BooleanVar(value=True)  #disabled
-            self.check_raw_G = tk.BooleanVar(value=True)
-            self.check_raw_logG = tk.BooleanVar(value=True)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2)
-            # 1D
-            self.check_1D_G = tk.BooleanVar(value=True)  #disabled
-            self.option_1D_count = tk.StringVar(value='Count')
-            tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0)
-            tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
-            # 2D
-            self.check_2D_axis = tk.BooleanVar(value=False)
-            self.option_2D_count = tk.StringVar(value='Count')
-            tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0)
-            tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
-            # button
-            tk.Button(self.window, text='Export', command=self.run).pack(side='top')
+class STM_bj_export_prompt:
 
-        def run(self):
-            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-            if path:
-                match self.tabcontrol.index('current'):
-                    case 0:
-                        A = STM_bj.get_displacement(self.G, **self.config).ravel()
-                        if self.check_raw_G.get(): A = np.vstack([A, self.G.ravel()])
-                        if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.G)).ravel()])
-                        np.savetxt(path, A.T, delimiter=",")
-                    case 1:
-                        G = np.log10(np.abs(self.hist_G.x)) if self.config['G_scale'] == 'log' else self.hist_G.x
-                        count = self.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.hist_G.height
-                        np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
-                    case 2:
-                        count = self.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.hist_GS.height.T
-                        if self.check_2D_axis.get():
-                            df = pd.DataFrame(count)
-                            df.columns = np.log10(np.abs(self.hist_GS.x)) if self.config['X_scale'] == 'log' else self.hist_GS.x
-                            df.index = np.log10(np.abs(self.hist_GS.y)) if self.config['G_scale'] == 'log' else self.hist_GS.y
-                            df.to_csv(path, sep=',')
-                        else:
-                            np.savetxt(path, count, delimiter=",")
+    def __init__(self, root: STM_bj_GUI, **kwargs) -> None:
+        self.window = tk.Toplevel()
+        self.window.grab_set()
+        self.window.title('Export')
+        self.window.resizable(False, False)
+        self.root = root
+        self.kwargs = kwargs
+        # tab
+        self.tabcontrol = ttk.Notebook(self.window)
+        self.tabcontrol.pack(side='top')
+        tab_raw = ttk.Frame(self.tabcontrol)
+        tab_1D = ttk.Frame(self.tabcontrol)
+        tab_2D = ttk.Frame(self.tabcontrol)
+        tab_settings = ttk.Frame(self.tabcontrol)
+        self.tabcontrol.add(tab_raw, text='Raw data')
+        self.tabcontrol.add(tab_1D, text='1D histogram')
+        self.tabcontrol.add(tab_2D, text='2D histogram')
+        self.tabcontrol.add(tab_settings, text='Settings')
+        # raw
+        self.check_raw_X = tk.BooleanVar(value=True)  #disabled
+        self.check_raw_G = tk.BooleanVar(value=True)
+        self.check_raw_logG = tk.BooleanVar(value=True)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2)
+        # 1D
+        self.check_1D_G = tk.BooleanVar(value=True)  #disabled
+        self.option_1D_count = tk.StringVar(value='Count')
+        tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0)
+        tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        # 2D
+        self.check_2D_axis = tk.BooleanVar(value=False)
+        self.option_2D_count = tk.StringVar(value='Count')
+        tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0)
+        tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        # button
+        tk.Button(self.window, text='Export', command=self.run).pack(side='top')
+
+    def run(self):
+        match self.tabcontrol.index('current'):
+            case 0:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                A = STM_bj.get_displacement(self.root.G, **self.root.run_config).ravel()
+                if self.check_raw_G.get(): A = np.vstack([A, self.root.G.ravel()])
+                if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.root.G)).ravel()])
+                np.savetxt(path, A.T, delimiter=",")
+            case 1:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                G = np.log10(np.abs(self.root.hist_G.x)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_G.x
+                count = self.root.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.root.hist_G.height
+                np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
+            case 2:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                count = self.root.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.root.hist_GS.height.T
+                if self.check_2D_axis.get():
+                    df = pd.DataFrame(count)
+                    df.columns = np.log10(np.abs(self.root.hist_GS.x)) if self.root.run_config['X_scale'] == 'log' else self.root.hist_GS.x
+                    df.index = np.log10(np.abs(self.root.hist_GS.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GS.y
+                    df.to_csv(path, sep=',')
+                else:
+                    np.savetxt(path, count, delimiter=",")
+            case 3:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+                if not path: return
+                settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
+                attributes = [
+                    self.root.is_raw.get(),
+                    self.root.directory_recursive.get(),
+                    self.root.extract_length.get(),
+                    self.root.upper.get(),
+                    self.root.lower.get(),
+                    self.root.zero_point.get(),
+                    self.root.points_per_nm.get(),
+                    self.root.direction.get(),
+                    self.root.G_min.get(),
+                    self.root.G_max.get(),
+                    self.root.G_bins.get(),
+                    self.root.G_scale.get(),
+                    self.root.X_min.get(),
+                    self.root.X_max.get(),
+                    self.root.X_bins.get(),
+                    self.root.X_scale.get()
+                ]
+                data = dict(zip(settings, attributes))
+                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+                if os.path.exists(path):
+                    with open(path, mode='r', encoding='utf-8') as f:
+                        old_data = yaml.load(f.read(), yaml.SafeLoader)
+                        if old_data: old_data.update({'STM-bj': data})
+                        else: old_data = {'STM-bj': data}
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump(old_data, f, yaml.SafeDumper)
+                else:
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump({'STM-bj': data}, f, yaml.SafeDumper)
 
 
 class I_Ebias_GUI(FileSystemEventHandler):
@@ -448,6 +487,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
         tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
+        tk.Button(self.frame_config, text='Export', command=self.export).grid(row=6, column=8)
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -508,7 +548,6 @@ class I_Ebias_GUI(FileSystemEventHandler):
             }
             self.pending = list()
             self.add_data(path)
-            tk.Button(self.frame_config, text='Export', command=self.export).grid(row=6, column=8)
             if isinstance(path, list): return
             self.observer = Observer()
             self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
@@ -570,17 +609,17 @@ class I_Ebias_GUI(FileSystemEventHandler):
             self.pending.clear()
 
     def export(self):
-        self.Export_prompt(self.I, self.V, self.hist_GV, self.hist_IV, **self.run_config)
+        I_Ebias_export_prompt(self)
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
-            data = yaml.load(f.read().replace('\\', '/'), yaml.SafeLoader)['I-Ebias']
-        settings = ['#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale', 'Data type', 'Recursive']
+            data = yaml.load(f.read(), yaml.SafeLoader)['I-Ebias']
+        settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
         attributes = [
-            self.num_segments, self.num_files, self.V_upper, self.length, self.I_unit, self.V_unit, self.V_range, self.I_limit, self.check_zeroing, self.direction, self.V_min, self.V_max, self.V_bins, self.V_scale, self.G_min, self.G_max, self.G_bins, self.G_scale, self.I_min, self.I_max,
-            self.I_bins, self.I_scale, self.is_raw, self.directory_recursive
+            self.is_raw, self.directory_recursive, self.num_segments, self.num_files, self.V_upper, self.length, self.I_unit, self.V_unit, self.V_range, self.I_limit, self.check_zeroing, self.direction, self.V_min, self.V_max, self.V_bins, self.V_scale, self.G_min, self.G_max, self.G_bins,
+            self.G_scale, self.I_min, self.I_max, self.I_bins, self.I_scale
         ]
         not_valid = list()
         for setting, attribute in zip(settings, attributes):
@@ -597,84 +636,130 @@ class I_Ebias_GUI(FileSystemEventHandler):
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
-    class Export_prompt:
 
-        def __init__(self, I: np.ndarray, V: np.ndarray, hist_GV: I_Ebias.Hist_GV, hist_IV: I_Ebias.Hist_IV, **conf) -> None:
-            self.window = tk.Toplevel()
-            self.window.grab_set()
-            self.window.title('Export')
-            self.window.resizable(False, False)
-            self.I = I
-            self.V = V
-            self.hist_GV = hist_GV
-            self.hist_IV = hist_IV
-            self.conf = conf
-            # tab
-            self.tabcontrol = ttk.Notebook(self.window)
-            self.tabcontrol.pack(side='top')
-            tab_raw = ttk.Frame(self.tabcontrol)
-            tab_GV = ttk.Frame(self.tabcontrol)
-            tab_IV = ttk.Frame(self.tabcontrol)
-            self.tabcontrol.add(tab_raw, text='Raw data')
-            self.tabcontrol.add(tab_GV, text='GV histogram')
-            self.tabcontrol.add(tab_IV, text='IV histogram')
-            # raw
-            self.check_raw_V = tk.BooleanVar(value=True)  #disabled
-            self.check_raw_G = tk.BooleanVar(value=False)
-            self.check_raw_logG = tk.BooleanVar(value=True)
-            self.check_raw_I = tk.BooleanVar(value=False)
-            self.check_raw_absI = tk.BooleanVar(value=False)
-            self.check_raw_logI = tk.BooleanVar(value=True)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_I, text='I').grid(row=1, column=1)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2)
-            tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3)
-            # GV
-            self.check_GV_axis = tk.BooleanVar(value=False)
-            self.option_GV_count = tk.StringVar(value='Count')
-            tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0)
-            tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
-            # IV
-            self.check_IV_axis = tk.BooleanVar(value=False)
-            self.option_IV_count = tk.StringVar(value='Count')
-            tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0)
-            tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
-            # button
-            tk.Button(self.window, text='Export', command=self.run).pack(side='top')
+class I_Ebias_export_prompt:
 
-        def run(self):
-            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-            if path:
-                match self.tabcontrol.index('current'):
-                    case 0:
-                        A = self.V.ravel()
-                        if self.check_raw_I.get(): A = np.vstack([A, self.I.ravel()])
-                        if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.I.ravel())])
-                        if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.I.ravel()))])
-                        G = I_Ebias.conductance(self.I, self.V).ravel()
-                        if self.check_raw_G.get(): A = np.vstack([A, G])
-                        if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
-                        np.savetxt(path, A.T, delimiter=",")
-                    case 1:
-                        count = self.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.hist_GV.height.T
-                        if self.check_GV_axis.get():
-                            df = pd.DataFrame(count)
-                            df.columns = np.log10(np.abs(self.hist_GV.x)) if self.conf['V_scale'] == 'log' else self.hist_GV.x
-                            df.index = np.log10(np.abs(self.hist_GV.y)) if self.conf['G_scale'] == 'log' else self.hist_GV.y
-                            df.to_csv(path, sep=',')
-                        else:
-                            np.savetxt(path, count, delimiter=",")
-                    case 2:
-                        count = self.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.hist_IV.height.T
-                        if self.check_IV_axis.get():
-                            df = pd.DataFrame(count)
-                            df.columns = np.log10(np.abs(self.hist_IV.x)) if self.conf['V_scale'] == 'log' else self.hist_IV.x
-                            df.index = np.log10(np.abs(self.hist_IV.y)) if self.conf['I_scale'] == 'log' else self.hist_IV.y
-                            df.to_csv(path, sep=',')
-                        else:
-                            np.savetxt(path, count, delimiter=",")
+    def __init__(self, root: I_Ebias_GUI, **kwargs) -> None:
+        self.window = tk.Toplevel()
+        self.window.grab_set()
+        self.window.title('Export')
+        self.window.resizable(False, False)
+        self.root = root
+        self.kwargs = kwargs
+        # tab
+        self.tabcontrol = ttk.Notebook(self.window)
+        self.tabcontrol.pack(side='top')
+        tab_raw = ttk.Frame(self.tabcontrol)
+        tab_GV = ttk.Frame(self.tabcontrol)
+        tab_IV = ttk.Frame(self.tabcontrol)
+        tab_settings = ttk.Frame(self.tabcontrol)
+        self.tabcontrol.add(tab_raw, text='Raw data')
+        self.tabcontrol.add(tab_GV, text='GV histogram')
+        self.tabcontrol.add(tab_IV, text='IV histogram')
+        self.tabcontrol.add(tab_settings, text='Settings')
+        # raw
+        self.check_raw_V = tk.BooleanVar(value=True)  #disabled
+        self.check_raw_G = tk.BooleanVar(value=False)
+        self.check_raw_logG = tk.BooleanVar(value=True)
+        self.check_raw_I = tk.BooleanVar(value=False)
+        self.check_raw_absI = tk.BooleanVar(value=False)
+        self.check_raw_logI = tk.BooleanVar(value=True)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_I, text='I').grid(row=1, column=1)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3)
+        # GV
+        self.check_GV_axis = tk.BooleanVar(value=False)
+        self.option_GV_count = tk.StringVar(value='Count')
+        tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0)
+        tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        # IV
+        self.check_IV_axis = tk.BooleanVar(value=False)
+        self.option_IV_count = tk.StringVar(value='Count')
+        tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0)
+        tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        # button
+        tk.Button(self.window, text='Export', command=self.run).pack(side='top')
+
+    def run(self):
+        match self.tabcontrol.index('current'):
+            case 0:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                A = self.root.V.ravel()
+                if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
+                if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.root.I.ravel())])
+                if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
+                G = I_Ebias.conductance(self.root.I, self.root.V).ravel()
+                if self.check_raw_G.get(): A = np.vstack([A, G])
+                if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
+                np.savetxt(path, A.T, delimiter=",")
+            case 1:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                count = self.root.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.root.hist_GV.height.T
+                if self.check_GV_axis.get():
+                    df = pd.DataFrame(count)
+                    df.columns = np.log10(np.abs(self.root.hist_GV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_GV.x
+                    df.index = np.log10(np.abs(self.root.hist_GV.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GV.y
+                    df.to_csv(path, sep=',')
+                else:
+                    np.savetxt(path, count, delimiter=",")
+            case 2:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                count = self.root.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.root.hist_IV.height.T
+                if self.check_IV_axis.get():
+                    df = pd.DataFrame(count)
+                    df.columns = np.log10(np.abs(self.root.hist_IV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_IV.x
+                    df.index = np.log10(np.abs(self.root.hist_IV.y)) if self.root.run_config['I_scale'] == 'log' else self.root.hist_IV.y
+                    df.to_csv(path, sep=',')
+                else:
+                    np.savetxt(path, count, delimiter=",")
+            case 3:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+                if not path: return
+                settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
+                attributes = [
+                    self.root.is_raw.get(),
+                    self.root.directory_recursive.get(),
+                    self.root.num_segments.get(),
+                    self.root.num_files.get(),
+                    self.root.V_upper.get(),
+                    self.root.length.get(),
+                    self.root.I_unit.get(),
+                    self.root.V_unit.get(),
+                    self.root.V_range.get(),
+                    self.root.I_limit.get(),
+                    self.root.check_zeroing.get(),
+                    self.root.direction.get(),
+                    self.root.V_min.get(),
+                    self.root.V_max.get(),
+                    self.root.V_bins.get(),
+                    self.root.V_scale.get(),
+                    self.root.G_min.get(),
+                    self.root.G_max.get(),
+                    self.root.G_bins.get(),
+                    self.root.G_scale.get(),
+                    self.root.I_min.get(),
+                    self.root.I_max.get(),
+                    self.root.I_bins.get(),
+                    self.root.I_scale.get()
+                ]
+                data = dict(zip(settings, attributes))
+                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+                if os.path.exists(path):
+                    with open(path, mode='r', encoding='utf-8') as f:
+                        old_data = yaml.load(f.read(), yaml.SafeLoader)
+                        if old_data: old_data.update({'I-Ebias': data})
+                        else: old_data = {'I-Ebias': data}
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump(old_data, f, yaml.SafeDumper)
+                else:
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump({'I-Ebias': data}, f, yaml.SafeDumper)
 
 
 if __name__ == '__main__':

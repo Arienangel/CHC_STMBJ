@@ -228,7 +228,7 @@ class Hist2D:
         self.ax.set_yscale(yscale)
         self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
-        self.y = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if yscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
+        self.y = np.sqrt(self.y_bins[1:] * self.y_bins[:-1]) if yscale == 'log' else (self.y_bins[1:] + self.y_bins[:-1]) / 2
 
     @property
     def height_per_trace(self):
