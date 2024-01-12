@@ -3,6 +3,7 @@ import json
 import multiprocessing
 import os
 import sys
+import threading
 import time
 import tkinter as tk
 import tkinter.filedialog
@@ -39,12 +40,14 @@ class Main:
         self.tab_name = tk.StringVar()
         tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
         tk.Button(frame, text='Apply', command=self.rename_tab).pack(side='left', padx=2)
-        global CPU_threads
+        global CPU_threads, debug
         CPU_threads = tk.IntVar(value=multiprocessing.cpu_count())
+        debug = tk.BooleanVar(value=False)
         self.always_on_top = tk.BooleanVar(value=False)
         tk.Label(frame, text='CPU threads: ').pack(side='left')
         tk.Entry(frame, textvariable=CPU_threads, width=10, justify='center').pack(side='left')
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
+        tk.Checkbutton(frame, variable=debug, text="Debug").pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
         tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
@@ -97,8 +100,8 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.directory_recursive = tk.BooleanVar(value=False)
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
-        tk.Button(self.frame_config, text="Files", command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
-        tk.Button(self.frame_config, text="Folder", command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.extract_length = tk.IntVar(value=2000)
         self.upper = tk.DoubleVar(value=3.2)
@@ -172,70 +175,70 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.status_last_file.pack(side='left')
 
     def run(self):
-        if not self.is_run:
-            path = self.directory_path.get().strip('"')
-            if not os.path.isdir(path):
+        match self.is_run:
+            case False:
+                path = self.directory_path.get()
+                if not os.path.isdir(path):
+                    try:
+                        path = json.loads(path)
+                    except Exception as E:
+                        tkinter.messagebox.showerror('Error', 'Invalid directory')
+                        return
+                plt.close()
+                for item in self.frame_figures.winfo_children():
+                    item.destroy()
+                self.G = np.empty((0, self.extract_length.get()))
+                self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
                 try:
-                    path = json.loads(path)
+                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                    if colorbar_conf != "\n":
+                        self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
                 except Exception as E:
-                    tkinter.messagebox.showerror('Error', 'Invalid directory')
-                    return
-            plt.close()
-            for item in self.frame_figures.winfo_children():
-                item.destroy()
-            self.G = np.empty((0, self.extract_length.get()))
-            self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-            self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
-            try:
-                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                if colorbar_conf != "\n":
-                    self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
-            except Exception as E:
-                tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
-            self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
-            self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-            self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
-            self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-            self.auto_normalize_G = tk.BooleanVar(value=True)
-            tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
-            self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
-            self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-            self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
-            self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
-            self.run_config = {
-                "length": self.extract_length.get(),
-                "upper": self.upper.get(),
-                "lower": self.lower.get(),
-                "method": self.direction.get(),
-                "zero_point": self.zero_point.get(),
-                "x_conversion": self.points_per_nm.get(),
-                'G_scale': self.G_scale.get(),
-                'X_scale': self.X_scale.get(),
-                'recursive': self.directory_recursive.get()
-            }
-            self.add_data(path)
-            if isinstance(path, list): return
-            self.observer = Observer()
-            self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
-            self.observer.start()
-            atexit.register(self.observer.stop)
-            self.run_button.config(text='Stop', bg='red')
-            self.is_run = True
-        else:
-            self.run_button.config(text='Run', bg='lime')
-            self.is_run = False
+                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+                self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
+                self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
+                self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
+                self.auto_normalize_G = tk.BooleanVar(value=True)
+                tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
+                self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
+                self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+                self.run_config = {
+                    "length": self.extract_length.get(),
+                    "upper": self.upper.get(),
+                    "lower": self.lower.get(),
+                    "method": self.direction.get(),
+                    "zero_point": self.zero_point.get(),
+                    "x_conversion": self.points_per_nm.get(),
+                    'G_scale': self.G_scale.get(),
+                    'X_scale': self.X_scale.get(),
+                    'recursive': self.directory_recursive.get()
+                }
+                self.status_traces.config(text=0)
+                threading.Thread(target=self.add_data, args=(path, )).start()
+                if isinstance(path, list): return
+                self.observer = Observer()
+                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+                self.observer.start()
+                atexit.register(self.observer.stop)
+                self.run_button.config(text='Stop', bg='red')
+                self.is_run = True
+            case True:
+                self.run_button.config(text='Run', bg='lime')
+                self.is_run = False
+                threading.Thread(target=self.observer.stop).start()
 
     def on_created(self, event):
-        if self.is_run is False:
-            self.observer.stop()
-            return
         if isinstance(event, FileCreatedEvent):
             if (event.src_path.endswith('.txt')):
                 try:
                     if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
                     self.add_data(event.src_path)
                 except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
+                    if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -252,14 +255,15 @@ class STM_bj_GUI(FileSystemEventHandler):
                     extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
                     extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
-            tkinter.messagebox.showerror('Error', 'Failed to extract files')
+            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
-        self.G = np.vstack([self.G, extracted])
-        self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
-        self.hist_GS.add_data(extracted)
-        self.canvas_G.draw()
-        self.canvas_GS.draw()
-        self.status_traces.config(text=self.hist_G.trace)
+        if extracted.size > 0:
+            self.G = np.vstack([self.G, extracted])
+            self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
+            self.hist_GS.add_data(extracted)
+            self.canvas_G.draw()
+            self.canvas_GS.draw()
+            self.status_traces.config(text=self.hist_G.trace)
 
     def export(self):
         STM_bj_export_prompt(self)
@@ -408,8 +412,8 @@ class I_Ebias_GUI(FileSystemEventHandler):
         frame_folder_setting.grid(row=0, column=1)
         tk.Entry(frame_folder_setting, textvariable=self.num_segments, justify='center', width=10).pack(side='left')
         tk.Entry(frame_folder_setting, textvariable=self.num_files, justify='center', width=10).pack(side='left')
-        tk.Button(self.frame_config, text="Files", command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6, padx=5)
-        tk.Button(self.frame_config, text="Folder", command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6, padx=5)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7)
         # row 1
         self.V_upper = tk.DoubleVar(value=1.45)
         self.length = tk.IntVar(value=1200)
@@ -502,74 +506,74 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.status_last_file.pack(side='left')
 
     def run(self):
-        if not self.is_run:
-            path = self.directory_path.get().strip('"')
-            if not os.path.isdir(path):
+        match self.is_run:
+            case False:
+                path = self.directory_path.get()
+                if not os.path.isdir(path):
+                    try:
+                        path = json.loads(path)
+                    except Exception as E:
+                        tkinter.messagebox.showerror('Error', 'Invalid directory')
+                        return
+                plt.close()
+                for item in self.frame_figure.winfo_children():
+                    item.destroy()
+                self.I = np.empty((0, self.length.get()))
+                self.V = np.empty((0, self.length.get()))
+                self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
+                self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
                 try:
-                    path = json.loads(path)
+                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                    if colorbar_conf != "\n":
+                        cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                        self.hist_GV.plot.set_cmap(cmap=cmap)
+                        self.hist_IV.plot.set_cmap(cmap=cmap)
                 except Exception as E:
-                    tkinter.messagebox.showerror('Error', 'Invalid directory')
-                    return
-            plt.close()
-            for item in self.frame_figure.winfo_children():
-                item.destroy()
-            self.I = np.empty((0, self.length.get()))
-            self.V = np.empty((0, self.length.get()))
-            self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
-            self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
-            try:
-                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                if colorbar_conf != "\n":
-                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
-                    self.hist_GV.plot.set_cmap(cmap=cmap)
-                    self.hist_IV.plot.set_cmap(cmap=cmap)
-            except Exception as E:
-                tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
-            self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
-            self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-            self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
-            self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
-            self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
-            self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-            self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
-            self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
-            self.run_config = {
-                "height": self.V_upper.get(),
-                "length": self.length.get(),
-                "units": (self.I_unit.get(), self.V_unit.get()),
-                "V_range": self.V_range.get(),
-                "I_max": self.I_limit.get(),
-                'V_scale': self.V_scale.get(),
-                'G_scale': self.G_scale.get(),
-                'I_scale': self.I_scale.get(),
-                'recursive': self.directory_recursive.get(),
-                'num_files': self.num_files.get(),
-                'zeroing': self.check_zeroing.get()
-            }
-            self.pending = list()
-            self.add_data(path)
-            if isinstance(path, list): return
-            self.observer = Observer()
-            self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
-            self.observer.start()
-            atexit.register(self.observer.stop)
-            self.run_button.config(text='Stop', bg='red')
-            self.is_run = True
-        else:
-            self.run_button.config(text='Run', bg='lime')
-            self.is_run = False
+                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+                self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
+                self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
+                self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
+                self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
+                self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
+                self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
+                self.run_config = {
+                    "height": self.V_upper.get(),
+                    "length": self.length.get(),
+                    "units": (self.I_unit.get(), self.V_unit.get()),
+                    "V_range": self.V_range.get(),
+                    "I_max": self.I_limit.get(),
+                    'V_scale': self.V_scale.get(),
+                    'G_scale': self.G_scale.get(),
+                    'I_scale': self.I_scale.get(),
+                    'recursive': self.directory_recursive.get(),
+                    'num_files': self.num_files.get(),
+                    'zeroing': self.check_zeroing.get()
+                }
+                self.pending = list()
+                self.status_traces.config(text=0)
+                threading.Thread(target=self.add_data, args=(path, )).start()
+                if isinstance(path, list): return
+                self.observer = Observer()
+                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+                self.observer.start()
+                atexit.register(self.observer.stop)
+                self.run_button.config(text='Stop', bg='red')
+                self.is_run = True
+            case True:
+                self.run_button.config(text='Run', bg='lime')
+                self.is_run = False
+                threading.Thread(target=self.observer.stop).start()
 
     def on_created(self, event):
-        if self.is_run is False:
-            self.observer.stop()
-            return
         if isinstance(event, FileCreatedEvent):
             if (event.src_path.endswith('.txt')):
                 try:
                     if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
                     self.add_data(event.src_path)
                 except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
+                    if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -587,13 +591,13 @@ class I_Ebias_GUI(FileSystemEventHandler):
                     extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
-            tkinter.messagebox.showerror('Error', 'Failed to extract files')
+            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
         if I.shape[0] < self.num_segments.get(): return
         else:
             I, V = I_Ebias.noise_remove(I, V, **self.run_config)
             if self.run_config['zeroing']: I, V = I_Ebias.zeroing(I, V)
-            if I.size:
+            if I.size > 0:
                 match self.direction.get():
                     case '-→+':
                         I, V = I_Ebias.split_scan_direction(I, V)[0]
