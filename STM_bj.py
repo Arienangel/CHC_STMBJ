@@ -9,7 +9,7 @@ import scipy.signal
 from baseclass import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset: tuple[float, float] = (10, 10), **kwargs) -> np.ndarray:
+def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset=(10, 10), **kwargs) -> np.ndarray:
     '''
     Extract useful data from raw_data
 
@@ -29,13 +29,12 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
         if len(index):
             split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
-            match method:
-                case 'pull':
-                    return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
-                case 'crash':
-                    return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
-                case 'both':
-                    return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
+            if method == 'pull':
+                return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
+            elif method == 'crash':
+                return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
+            elif method == 'both':
+                return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
 
@@ -64,7 +63,7 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
 
 class Hist_G(Hist1D):
 
-    def __init__(self, xlim: tuple[float, float] = (1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
+    def __init__(self, xlim=(1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
         super().__init__(xlim, num_bin, x_scale, **kwargs)
         self.ax.set_xlabel('Conductance ($G/G_0$)')
         self.ax.set_ylabel('Count/trace')
@@ -104,16 +103,7 @@ class Hist_G(Hist1D):
 
 class Hist_GS(Hist2D):
 
-    def __init__(self,
-                 xlim: tuple[float, float] = (-0.3, 0.5),
-                 ylim: tuple[float, float] = (1e-5, 10**0.5),
-                 num_x_bin: float = 800,
-                 num_y_bin: float = 550,
-                 xscale: Literal['linear', 'log'] = 'linear',
-                 yscale: Literal['linear', 'log'] = 'log',
-                 zero_point: float = 0.5,
-                 x_conversion: float = 800,
-                 **kwargs) -> None:
+    def __init__(self, xlim=(-0.3, 0.5), ylim=(1e-5, 10**0.5), num_x_bin: float = 800, num_y_bin: float = 550, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', zero_point: float = 0.5, x_conversion: float = 800, **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('Displacement (nm)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')

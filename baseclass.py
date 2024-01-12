@@ -119,7 +119,7 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
     elif path.endswith('.npy'):
         return np.load(path)
     elif os.path.isdir(path):
-        files = glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)
+        files = glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)
         files = [open(os.path.join(path, file), 'rb').read() for file in files]
         if files:
             with multiprocessing.Pool(threads) as pool:
@@ -151,7 +151,7 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: float, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim, num_x_bin: float, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
@@ -212,7 +212,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: float, num_y_bin: float, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim, ylim, num_x_bin: float, num_y_bin: float, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None

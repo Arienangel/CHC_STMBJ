@@ -55,21 +55,20 @@ class Main:
 
     def new_tab(self, experiment: str):
         name = self.tab_name.get() if self.tab_name.get() else experiment
-        match experiment:
-            case 'STM-bj':
-                tab = ttk.Frame(self.tabcontrol)
-                self.tabcontrol.add(tab, text=name)
-                self.tabcontrol.select(tab)
-                STM_bj_GUI(tab)
-            case 'I-Ebias':
-                tab = ttk.Frame(self.tabcontrol)
-                self.tabcontrol.add(tab, text=name)
-                self.tabcontrol.select(tab)
-                I_Ebias_GUI(tab)
-            case 'I-Ewk':
-                tab = ttk.Frame(self.tabcontrol)
-                self.tabcontrol.add(tab, text=name)
-                self.tabcontrol.select(tab)
+        if experiment == 'STM-bj':
+            tab = ttk.Frame(self.tabcontrol)
+            self.tabcontrol.add(tab, text=name)
+            self.tabcontrol.select(tab)
+            STM_bj_GUI(tab)
+        elif experiment == 'I-Ebias':
+            tab = ttk.Frame(self.tabcontrol)
+            self.tabcontrol.add(tab, text=name)
+            self.tabcontrol.select(tab)
+            I_Ebias_GUI(tab)
+        elif experiment == 'I-Ewk':
+            tab = ttk.Frame(self.tabcontrol)
+            self.tabcontrol.add(tab, text=name)
+            self.tabcontrol.select(tab)
 
     def rename_tab(self):
         try:
@@ -175,61 +174,60 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.status_last_file.pack(side='left')
 
     def run(self):
-        match self.is_run:
-            case False:
-                path = self.directory_path.get()
-                if not os.path.isdir(path):
-                    try:
-                        path = json.loads(path)
-                    except Exception as E:
-                        tkinter.messagebox.showerror('Error', 'Invalid directory')
-                        return
-                plt.close()
-                for item in self.frame_figures.winfo_children():
-                    item.destroy()
-                self.G = np.empty((0, self.extract_length.get()))
-                self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-                self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
+        if self.is_run == False:
+            path = self.directory_path.get()
+            if not os.path.isdir(path):
                 try:
-                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                    if colorbar_conf != "\n":
-                        self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
+                    path = json.loads(path)
                 except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
-                self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
-                self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
-                self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                self.auto_normalize_G = tk.BooleanVar(value=True)
-                tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
-                self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
-                self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
-                self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
-                self.run_config = {
-                    "length": self.extract_length.get(),
-                    "upper": self.upper.get(),
-                    "lower": self.lower.get(),
-                    "method": self.direction.get(),
-                    "zero_point": self.zero_point.get(),
-                    "x_conversion": self.points_per_nm.get(),
-                    'G_scale': self.G_scale.get(),
-                    'X_scale': self.X_scale.get(),
-                    'recursive': self.directory_recursive.get()
-                }
-                self.status_traces.config(text=0)
-                threading.Thread(target=self.add_data, args=(path, )).start()
-                if isinstance(path, list): return
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
-                self.observer.start()
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
-            case True:
-                self.run_button.config(text='Run', bg='lime')
-                self.is_run = False
-                threading.Thread(target=self.observer.stop).start()
+                    tkinter.messagebox.showerror('Error', 'Invalid directory')
+                    return
+            plt.close()
+            for item in self.frame_figures.winfo_children():
+                item.destroy()
+            self.G = np.empty((0, self.extract_length.get()))
+            self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+            self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
+            try:
+                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                if colorbar_conf != "\n":
+                    self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
+            except Exception as E:
+                tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+            self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
+            self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+            self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
+            self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
+            self.auto_normalize_G = tk.BooleanVar(value=True)
+            tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+            self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
+            self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+            self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
+            self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+            self.run_config = {
+                "length": self.extract_length.get(),
+                "upper": self.upper.get(),
+                "lower": self.lower.get(),
+                "method": self.direction.get(),
+                "zero_point": self.zero_point.get(),
+                "x_conversion": self.points_per_nm.get(),
+                'G_scale': self.G_scale.get(),
+                'X_scale': self.X_scale.get(),
+                'recursive': self.directory_recursive.get()
+            }
+            self.status_traces.config(text=0)
+            threading.Thread(target=self.add_data, args=(path, )).start()
+            if isinstance(path, list): return
+            self.observer = Observer()
+            self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+            self.observer.start()
+            atexit.register(self.observer.stop)
+            self.run_button.config(text='Stop', bg='red')
+            self.is_run = True
+        else:
+            self.run_button.config(text='Run', bg='lime')
+            self.is_run = False
+            threading.Thread(target=self.observer.stop).start()
 
     def on_created(self, event):
         if isinstance(event, FileCreatedEvent):
@@ -240,7 +238,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 except Exception as E:
                     if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
 
-    def add_data(self, path: str | list):
+    def add_data(self, path):
         if isinstance(path, str):
             self.status_last_file.config(text=path)
             if os.path.isdir(path):
@@ -248,12 +246,11 @@ class STM_bj_GUI(FileSystemEventHandler):
         else:
             self.status_last_file.config(text="(Multiple)")
         try:
-            match self.is_raw.get():
-                case 'raw':
-                    extracted = STM_bj.extract_data(path, **self.run_config, threads=CPU_threads.get())
-                case 'cut':
-                    extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
-                    extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
+            if self.is_raw.get() == 'raw':
+                extracted = STM_bj.extract_data(path, **self.run_config, threads=CPU_threads.get())
+            elif self.is_raw.get() == 'cut':
+                extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
+                extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
@@ -332,65 +329,64 @@ class STM_bj_export_prompt:
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
     def run(self):
-        match self.tabcontrol.index('current'):
-            case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                A = STM_bj.get_displacement(self.root.G, **self.root.run_config).ravel()
-                if self.check_raw_G.get(): A = np.vstack([A, self.root.G.ravel()])
-                if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.root.G)).ravel()])
-                np.savetxt(path, A.T, delimiter=",")
-            case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                G = np.log10(np.abs(self.root.hist_G.x)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_G.x
-                count = self.root.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.root.hist_G.height
-                np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
-            case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                count = self.root.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.root.hist_GS.height.T
-                if self.check_2D_axis.get():
-                    df = pd.DataFrame(count)
-                    df.columns = np.log10(np.abs(self.root.hist_GS.x)) if self.root.run_config['X_scale'] == 'log' else self.root.hist_GS.x
-                    df.index = np.log10(np.abs(self.root.hist_GS.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GS.y
-                    df.to_csv(path, sep=',')
-                else:
-                    np.savetxt(path, count, delimiter=",")
-            case 3:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
-                if not path: return
-                settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
-                attributes = [
-                    self.root.is_raw.get(),
-                    self.root.directory_recursive.get(),
-                    self.root.extract_length.get(),
-                    self.root.upper.get(),
-                    self.root.lower.get(),
-                    self.root.zero_point.get(),
-                    self.root.points_per_nm.get(),
-                    self.root.direction.get(),
-                    self.root.G_min.get(),
-                    self.root.G_max.get(),
-                    self.root.G_bins.get(),
-                    self.root.G_scale.get(),
-                    self.root.X_min.get(),
-                    self.root.X_max.get(),
-                    self.root.X_bins.get(),
-                    self.root.X_scale.get()
-                ]
-                data = dict(zip(settings, attributes))
-                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
-                if os.path.exists(path):
-                    with open(path, mode='r', encoding='utf-8') as f:
-                        old_data = yaml.load(f.read(), yaml.SafeLoader)
-                        if old_data: old_data.update({'STM-bj': data})
-                        else: old_data = {'STM-bj': data}
-                    with open(path, mode='w', encoding='utf-8') as f:
-                        data = yaml.dump(old_data, f, yaml.SafeDumper)
-                else:
-                    with open(path, mode='w', encoding='utf-8') as f:
-                        data = yaml.dump({'STM-bj': data}, f, yaml.SafeDumper)
+        if self.tabcontrol.index('current') == 0:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            A = STM_bj.get_displacement(self.root.G, **self.root.run_config).ravel()
+            if self.check_raw_G.get(): A = np.vstack([A, self.root.G.ravel()])
+            if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.root.G)).ravel()])
+            np.savetxt(path, A.T, delimiter=",")
+        elif self.tabcontrol.index('current') == 1:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            G = np.log10(np.abs(self.root.hist_G.x)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_G.x
+            count = self.root.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.root.hist_G.height
+            np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
+        elif self.tabcontrol.index('current') == 2:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            count = self.root.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.root.hist_GS.height.T
+            if self.check_2D_axis.get():
+                df = pd.DataFrame(count)
+                df.columns = np.log10(np.abs(self.root.hist_GS.x)) if self.root.run_config['X_scale'] == 'log' else self.root.hist_GS.x
+                df.index = np.log10(np.abs(self.root.hist_GS.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GS.y
+                df.to_csv(path, sep=',')
+            else:
+                np.savetxt(path, count, delimiter=",")
+        elif self.tabcontrol.index('current') == 3:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+            if not path: return
+            settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
+            attributes = [
+                self.root.is_raw.get(),
+                self.root.directory_recursive.get(),
+                self.root.extract_length.get(),
+                self.root.upper.get(),
+                self.root.lower.get(),
+                self.root.zero_point.get(),
+                self.root.points_per_nm.get(),
+                self.root.direction.get(),
+                self.root.G_min.get(),
+                self.root.G_max.get(),
+                self.root.G_bins.get(),
+                self.root.G_scale.get(),
+                self.root.X_min.get(),
+                self.root.X_max.get(),
+                self.root.X_bins.get(),
+                self.root.X_scale.get()
+            ]
+            data = dict(zip(settings, attributes))
+            data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+            if os.path.exists(path):
+                with open(path, mode='r', encoding='utf-8') as f:
+                    old_data = yaml.load(f.read(), yaml.SafeLoader)
+                    if old_data: old_data.update({'STM-bj': data})
+                    else: old_data = {'STM-bj': data}
+                with open(path, mode='w', encoding='utf-8') as f:
+                    data = yaml.dump(old_data, f, yaml.SafeDumper)
+            else:
+                with open(path, mode='w', encoding='utf-8') as f:
+                    data = yaml.dump({'STM-bj': data}, f, yaml.SafeDumper)
 
 
 class I_Ebias_GUI(FileSystemEventHandler):
@@ -506,65 +502,64 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.status_last_file.pack(side='left')
 
     def run(self):
-        match self.is_run:
-            case False:
-                path = self.directory_path.get()
-                if not os.path.isdir(path):
-                    try:
-                        path = json.loads(path)
-                    except Exception as E:
-                        tkinter.messagebox.showerror('Error', 'Invalid directory')
-                        return
-                plt.close()
-                for item in self.frame_figure.winfo_children():
-                    item.destroy()
-                self.I = np.empty((0, self.length.get()))
-                self.V = np.empty((0, self.length.get()))
-                self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
-                self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
+        if self.is_run == False:
+            path = self.directory_path.get()
+            if not os.path.isdir(path):
                 try:
-                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                    if colorbar_conf != "\n":
-                        cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
-                        self.hist_GV.plot.set_cmap(cmap=cmap)
-                        self.hist_IV.plot.set_cmap(cmap=cmap)
+                    path = json.loads(path)
                 except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
-                self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
-                self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
-                self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
-                self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
-                self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
-                self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
-                self.run_config = {
-                    "height": self.V_upper.get(),
-                    "length": self.length.get(),
-                    "units": (self.I_unit.get(), self.V_unit.get()),
-                    "V_range": self.V_range.get(),
-                    "I_max": self.I_limit.get(),
-                    'V_scale': self.V_scale.get(),
-                    'G_scale': self.G_scale.get(),
-                    'I_scale': self.I_scale.get(),
-                    'recursive': self.directory_recursive.get(),
-                    'num_files': self.num_files.get(),
-                    'zeroing': self.check_zeroing.get()
-                }
-                self.pending = list()
-                self.status_traces.config(text=0)
-                threading.Thread(target=self.add_data, args=(path, )).start()
-                if isinstance(path, list): return
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
-                self.observer.start()
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
-            case True:
-                self.run_button.config(text='Run', bg='lime')
-                self.is_run = False
-                threading.Thread(target=self.observer.stop).start()
+                    tkinter.messagebox.showerror('Error', 'Invalid directory')
+                    return
+            plt.close()
+            for item in self.frame_figure.winfo_children():
+                item.destroy()
+            self.I = np.empty((0, self.length.get()))
+            self.V = np.empty((0, self.length.get()))
+            self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
+            self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
+            try:
+                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                if colorbar_conf != "\n":
+                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                    self.hist_GV.plot.set_cmap(cmap=cmap)
+                    self.hist_IV.plot.set_cmap(cmap=cmap)
+            except Exception as E:
+                tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+            self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
+            self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+            self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
+            self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
+            self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
+            self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+            self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
+            self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
+            self.run_config = {
+                "height": self.V_upper.get(),
+                "length": self.length.get(),
+                "units": (self.I_unit.get(), self.V_unit.get()),
+                "V_range": self.V_range.get(),
+                "I_max": self.I_limit.get(),
+                'V_scale': self.V_scale.get(),
+                'G_scale': self.G_scale.get(),
+                'I_scale': self.I_scale.get(),
+                'recursive': self.directory_recursive.get(),
+                'num_files': self.num_files.get(),
+                'zeroing': self.check_zeroing.get()
+            }
+            self.pending = list()
+            self.status_traces.config(text=0)
+            threading.Thread(target=self.add_data, args=(path, )).start()
+            if isinstance(path, list): return
+            self.observer = Observer()
+            self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+            self.observer.start()
+            atexit.register(self.observer.stop)
+            self.run_button.config(text='Stop', bg='red')
+            self.is_run = True
+        else:
+            self.run_button.config(text='Run', bg='lime')
+            self.is_run = False
+            threading.Thread(target=self.observer.stop).start()
 
     def on_created(self, event):
         if isinstance(event, FileCreatedEvent):
@@ -575,7 +570,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
                 except Exception as E:
                     if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
 
-    def add_data(self, path: str | list):
+    def add_data(self, path):
         if isinstance(path, str):
             self.status_last_file.config(text=path)
             if os.path.isdir(path):
@@ -584,12 +579,11 @@ class I_Ebias_GUI(FileSystemEventHandler):
             self.status_last_file.config(text="(Multiple)")
         self.pending.append(path)
         try:
-            match self.is_raw.get():
-                case 'raw':
-                    I, V = I_Ebias.extract_data(self.pending[-self.num_files.get():], **self.run_config, threads=CPU_threads.get())
-                case 'cut':
-                    extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
-                    V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
+            if self.is_raw.get() == 'raw':
+                I, V = I_Ebias.extract_data(self.pending[-self.num_files.get():], **self.run_config, threads=CPU_threads.get())
+            elif self.is_raw.get() == 'cut':
+                extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
+                V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
@@ -598,11 +592,10 @@ class I_Ebias_GUI(FileSystemEventHandler):
             I, V = I_Ebias.noise_remove(I, V, **self.run_config)
             if self.run_config['zeroing']: I, V = I_Ebias.zeroing(I, V)
             if I.size > 0:
-                match self.direction.get():
-                    case '-→+':
-                        I, V = I_Ebias.split_scan_direction(I, V)[0]
-                    case '+→-':
-                        I, V = I_Ebias.split_scan_direction(I, V)[1]
+                if self.direction.get() == '-→+':
+                    I, V = I_Ebias.split_scan_direction(I, V)[0]
+                elif self.direction.get() == '+→-':
+                    I, V = I_Ebias.split_scan_direction(I, V)[1]
                 self.hist_GV.add_data(I, V)
                 self.hist_IV.add_data(I, V)
                 self.canvas_GV.draw()
@@ -688,82 +681,81 @@ class I_Ebias_export_prompt:
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
     def run(self):
-        match self.tabcontrol.index('current'):
-            case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                A = self.root.V.ravel()
-                if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
-                if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.root.I.ravel())])
-                if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
-                G = I_Ebias.conductance(self.root.I, self.root.V).ravel()
-                if self.check_raw_G.get(): A = np.vstack([A, G])
-                if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
-                np.savetxt(path, A.T, delimiter=",")
-            case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                count = self.root.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.root.hist_GV.height.T
-                if self.check_GV_axis.get():
-                    df = pd.DataFrame(count)
-                    df.columns = np.log10(np.abs(self.root.hist_GV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_GV.x
-                    df.index = np.log10(np.abs(self.root.hist_GV.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GV.y
-                    df.to_csv(path, sep=',')
-                else:
-                    np.savetxt(path, count, delimiter=",")
-            case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
-                if not path: return
-                count = self.root.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.root.hist_IV.height.T
-                if self.check_IV_axis.get():
-                    df = pd.DataFrame(count)
-                    df.columns = np.log10(np.abs(self.root.hist_IV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_IV.x
-                    df.index = np.log10(np.abs(self.root.hist_IV.y)) if self.root.run_config['I_scale'] == 'log' else self.root.hist_IV.y
-                    df.to_csv(path, sep=',')
-                else:
-                    np.savetxt(path, count, delimiter=",")
-            case 3:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
-                if not path: return
-                settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
-                attributes = [
-                    self.root.is_raw.get(),
-                    self.root.directory_recursive.get(),
-                    self.root.num_segments.get(),
-                    self.root.num_files.get(),
-                    self.root.V_upper.get(),
-                    self.root.length.get(),
-                    self.root.I_unit.get(),
-                    self.root.V_unit.get(),
-                    self.root.V_range.get(),
-                    self.root.I_limit.get(),
-                    self.root.check_zeroing.get(),
-                    self.root.direction.get(),
-                    self.root.V_min.get(),
-                    self.root.V_max.get(),
-                    self.root.V_bins.get(),
-                    self.root.V_scale.get(),
-                    self.root.G_min.get(),
-                    self.root.G_max.get(),
-                    self.root.G_bins.get(),
-                    self.root.G_scale.get(),
-                    self.root.I_min.get(),
-                    self.root.I_max.get(),
-                    self.root.I_bins.get(),
-                    self.root.I_scale.get()
-                ]
-                data = dict(zip(settings, attributes))
-                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
-                if os.path.exists(path):
-                    with open(path, mode='r', encoding='utf-8') as f:
-                        old_data = yaml.load(f.read(), yaml.SafeLoader)
-                        if old_data: old_data.update({'I-Ebias': data})
-                        else: old_data = {'I-Ebias': data}
-                    with open(path, mode='w', encoding='utf-8') as f:
-                        data = yaml.dump(old_data, f, yaml.SafeDumper)
-                else:
-                    with open(path, mode='w', encoding='utf-8') as f:
-                        data = yaml.dump({'I-Ebias': data}, f, yaml.SafeDumper)
+        if self.tabcontrol.index('current') == 0:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            A = self.root.V.ravel()
+            if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
+            if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.root.I.ravel())])
+            if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
+            G = I_Ebias.conductance(self.root.I, self.root.V).ravel()
+            if self.check_raw_G.get(): A = np.vstack([A, G])
+            if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
+            np.savetxt(path, A.T, delimiter=",")
+        elif self.tabcontrol.index('current') == 1:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            count = self.root.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.root.hist_GV.height.T
+            if self.check_GV_axis.get():
+                df = pd.DataFrame(count)
+                df.columns = np.log10(np.abs(self.root.hist_GV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_GV.x
+                df.index = np.log10(np.abs(self.root.hist_GV.y)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_GV.y
+                df.to_csv(path, sep=',')
+            else:
+                np.savetxt(path, count, delimiter=",")
+        elif self.tabcontrol.index('current') == 2:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+            if not path: return
+            count = self.root.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.root.hist_IV.height.T
+            if self.check_IV_axis.get():
+                df = pd.DataFrame(count)
+                df.columns = np.log10(np.abs(self.root.hist_IV.x)) if self.root.run_config['V_scale'] == 'log' else self.root.hist_IV.x
+                df.index = np.log10(np.abs(self.root.hist_IV.y)) if self.root.run_config['I_scale'] == 'log' else self.root.hist_IV.y
+                df.to_csv(path, sep=',')
+            else:
+                np.savetxt(path, count, delimiter=",")
+        elif self.tabcontrol.index('current') == 3:
+            path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+            if not path: return
+            settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
+            attributes = [
+                self.root.is_raw.get(),
+                self.root.directory_recursive.get(),
+                self.root.num_segments.get(),
+                self.root.num_files.get(),
+                self.root.V_upper.get(),
+                self.root.length.get(),
+                self.root.I_unit.get(),
+                self.root.V_unit.get(),
+                self.root.V_range.get(),
+                self.root.I_limit.get(),
+                self.root.check_zeroing.get(),
+                self.root.direction.get(),
+                self.root.V_min.get(),
+                self.root.V_max.get(),
+                self.root.V_bins.get(),
+                self.root.V_scale.get(),
+                self.root.G_min.get(),
+                self.root.G_max.get(),
+                self.root.G_bins.get(),
+                self.root.G_scale.get(),
+                self.root.I_min.get(),
+                self.root.I_max.get(),
+                self.root.I_bins.get(),
+                self.root.I_scale.get()
+            ]
+            data = dict(zip(settings, attributes))
+            data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+            if os.path.exists(path):
+                with open(path, mode='r', encoding='utf-8') as f:
+                    old_data = yaml.load(f.read(), yaml.SafeLoader)
+                    if old_data: old_data.update({'I-Ebias': data})
+                    else: old_data = {'I-Ebias': data}
+                with open(path, mode='w', encoding='utf-8') as f:
+                    data = yaml.dump(old_data, f, yaml.SafeDumper)
+            else:
+                with open(path, mode='w', encoding='utf-8') as f:
+                    data = yaml.dump({'I-Ebias': data}, f, yaml.SafeDumper)
 
 
 if __name__ == '__main__':
