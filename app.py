@@ -95,6 +95,7 @@ class STM_bj_GUI(FileSystemEventHandler):
 
     def __init__(self, root: tk.Frame) -> None:
         self.window = root
+        self.export_prompt = STM_bj_export_prompt(self)
         # config frame
         self.frame_config = tk.Frame(self.window)
         self.frame_config.pack(side='top', anchor='w')
@@ -163,7 +164,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.run_button.grid(row=5, column=6, padx=10)
         self.is_run = False
         tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=5, column=7)
-        tk.Button(self.frame_config, text='Export', command=self.export).grid(row=5, column=8)
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=5, column=8)
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -268,18 +269,31 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.canvas_GS.draw()
             self.status_traces.config(text=self.hist_G.trace)
 
-    def export(self):
-        STM_bj_export_prompt(self)
-
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
             data = yaml.load(f.read(), yaml.SafeLoader)['STM-bj']
-        settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
-        attributes = [self.is_raw, self.directory_recursive, self.extract_length, self.upper, self.lower, self.zero_point, self.points_per_nm, self.direction, self.G_min, self.G_max, self.G_bins, self.G_scale, self.X_min, self.X_max, self.X_bins, self.X_scale]
+        settings = {
+            'Data type': self.is_raw,
+            'Recursive': self.directory_recursive,
+            'Length': self.extract_length,
+            'G upper': self.upper,
+            'G lower': self.lower,
+            'X=0@G=': self.zero_point,
+            'Points/nm': self.points_per_nm,
+            'Direction': self.direction,
+            'G min': self.G_min,
+            'G max': self.G_max,
+            'G #bins': self.G_bins,
+            'G scale': self.G_scale,
+            'X min': self.X_min,
+            'X max': self.X_max,
+            'X #bins': self.X_bins,
+            'X scale': self.X_scale
+        }
         not_valid = list()
-        for setting, attribute in zip(settings, attributes):
+        for setting, attribute in settings.items():
             try:
                 if setting in data: attribute.set(data[setting])
             except Exception as E:
@@ -298,7 +312,8 @@ class STM_bj_export_prompt:
 
     def __init__(self, root: STM_bj_GUI, **kwargs) -> None:
         self.window = tk.Toplevel()
-        self.window.grab_set()
+        self.hide()
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.title('Export')
         self.window.resizable(False, False)
         self.root = root
@@ -334,6 +349,14 @@ class STM_bj_export_prompt:
         # button
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
+    def show(self):
+        self.window.deiconify()
+        self.window.grab_set()
+
+    def hide(self):
+        self.window.withdraw()
+        self.window.grab_release()
+
     def run(self):
         tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
@@ -364,27 +387,25 @@ class STM_bj_export_prompt:
             case 3:
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
-                settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
-                attributes = [
-                    self.root.is_raw.get(),
-                    self.root.directory_recursive.get(),
-                    self.root.extract_length.get(),
-                    self.root.upper.get(),
-                    self.root.lower.get(),
-                    self.root.zero_point.get(),
-                    self.root.points_per_nm.get(),
-                    self.root.direction.get(),
-                    self.root.G_min.get(),
-                    self.root.G_max.get(),
-                    self.root.G_bins.get(),
-                    self.root.G_scale.get(),
-                    self.root.X_min.get(),
-                    self.root.X_max.get(),
-                    self.root.X_bins.get(),
-                    self.root.X_scale.get()
-                ]
-                data = dict(zip(settings, attributes))
-                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+                data = {
+                    'Data type': self.root.is_raw.get(),
+                    'Recursive': self.root.directory_recursive.get(),
+                    'Length': self.root.extract_length.get(),
+                    'G upper': self.root.upper.get(),
+                    'G lower': self.root.lower.get(),
+                    'X=0@G=': self.root.zero_point.get(),
+                    'Points/nm': self.root.points_per_nm.get(),
+                    'Direction': self.root.direction.get(),
+                    'G min': self.root.G_min.get(),
+                    'G max': self.root.G_max.get(),
+                    'G #bins': self.root.G_bins.get(),
+                    'G scale': self.root.G_scale.get(),
+                    'X min': self.root.X_min.get(),
+                    'X max': self.root.X_max.get(),
+                    'X #bins': self.root.X_bins.get(),
+                    'X scale': self.root.X_scale.get(),
+                    'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
+                }
                 if os.path.exists(path):
                     with open(path, mode='r', encoding='utf-8') as f:
                         old_data = yaml.load(f.read(), yaml.SafeLoader)
@@ -401,6 +422,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
 
     def __init__(self, iframe: tk.Frame) -> None:
         self.window = iframe
+        self.export_prompt = I_Ebias_export_prompt(self)
         # config frame
         self.frame_config = tk.Frame(self.window)
         self.frame_config.pack(side='top', anchor='w')
@@ -495,7 +517,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
         tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
-        tk.Button(self.frame_config, text='Export', command=self.export).grid(row=6, column=8)
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -616,21 +638,39 @@ class I_Ebias_GUI(FileSystemEventHandler):
                 self.V = np.vstack([self.V, V])
             self.pending.clear()
 
-    def export(self):
-        I_Ebias_export_prompt(self)
-
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
             data = yaml.load(f.read(), yaml.SafeLoader)['I-Ebias']
-        settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
-        attributes = [
-            self.is_raw, self.directory_recursive, self.num_segments, self.num_files, self.V_upper, self.length, self.I_unit, self.V_unit, self.V_range, self.I_limit, self.check_zeroing, self.direction, self.V_min, self.V_max, self.V_bins, self.V_scale, self.G_min, self.G_max, self.G_bins,
-            self.G_scale, self.I_min, self.I_max, self.I_bins, self.I_scale
-        ]
+        settings = {
+            'Data type': self.is_raw,
+            'Recursive': self.directory_recursive,
+            '#Segments': self.num_segments,
+            '#Files': self.num_files,
+            'V upper': self.V_upper,
+            'Length': self.length,
+            'I unit': self.I_unit,
+            'V unit': self.V_unit,
+            'I min@V<': self.V_range,
+            'I limit': self.I_limit,
+            'Zeroing': self.check_zeroing,
+            'Direction': self.direction,
+            'V min': self.V_min,
+            'V max': self.V_max,
+            'V #bins': self.V_bins,
+            'V scale': self.V_scale,
+            'G min': self.G_min,
+            'G max': self.G_max,
+            'G #bins': self.G_bins,
+            'G scale': self.G_scale,
+            'I max': self.I_min,
+            'I min': self.I_max,
+            'I #bins': self.I_bins,
+            'I scale': self.I_scale,
+        }
         not_valid = list()
-        for setting, attribute in zip(settings, attributes):
+        for setting, attribute in settings.items():
             try:
                 if setting in data: attribute.set(data[setting])
             except Exception as E:
@@ -649,7 +689,8 @@ class I_Ebias_export_prompt:
 
     def __init__(self, root: I_Ebias_GUI, **kwargs) -> None:
         self.window = tk.Toplevel()
-        self.window.grab_set()
+        self.hide()
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.title('Export')
         self.window.resizable(False, False)
         self.root = root
@@ -691,6 +732,14 @@ class I_Ebias_export_prompt:
         # button
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
+    def show(self):
+        self.window.deiconify()
+        self.window.grab_set()
+
+    def hide(self):
+        self.window.withdraw()
+        self.window.grab_release()
+
     def run(self):
         tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
@@ -730,35 +779,33 @@ class I_Ebias_export_prompt:
             case 3:
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
-                settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
-                attributes = [
-                    self.root.is_raw.get(),
-                    self.root.directory_recursive.get(),
-                    self.root.num_segments.get(),
-                    self.root.num_files.get(),
-                    self.root.V_upper.get(),
-                    self.root.length.get(),
-                    self.root.I_unit.get(),
-                    self.root.V_unit.get(),
-                    self.root.V_range.get(),
-                    self.root.I_limit.get(),
-                    self.root.check_zeroing.get(),
-                    self.root.direction.get(),
-                    self.root.V_min.get(),
-                    self.root.V_max.get(),
-                    self.root.V_bins.get(),
-                    self.root.V_scale.get(),
-                    self.root.G_min.get(),
-                    self.root.G_max.get(),
-                    self.root.G_bins.get(),
-                    self.root.G_scale.get(),
-                    self.root.I_min.get(),
-                    self.root.I_max.get(),
-                    self.root.I_bins.get(),
-                    self.root.I_scale.get()
-                ]
-                data = dict(zip(settings, attributes))
-                data.update({'Colorbar': self.root.colorbar_conf.get('0.0', 'end')})
+                data = {
+                    'Data type': self.root.is_raw.get(),
+                    'Recursive': self.root.directory_recursive.get(),
+                    '#Segments': self.root.num_segments.get(),
+                    '#Files': self.root.num_files.get(),
+                    'V upper': self.root.V_upper.get(),
+                    'Length': self.root.length.get(),
+                    'I unit': self.root.I_unit.get(),
+                    'V unit': self.root.V_unit.get(),
+                    'I min@V<': self.root.V_range.get(),
+                    'I limit': self.root.I_limit.get(),
+                    'Zeroing': self.root.check_zeroing.get(),
+                    'Direction': self.root.direction.get(),
+                    'V min': self.root.V_min.get(),
+                    'V max': self.root.V_max.get(),
+                    'V #bins': self.root.V_bins.get(),
+                    'V scale': self.root.V_scale.get(),
+                    'G min': self.root.G_min.get(),
+                    'G max': self.root.G_max.get(),
+                    'G #bins': self.root.G_bins.get(),
+                    'G scale': self.root.G_scale.get(),
+                    'I max': self.root.I_min.get(),
+                    'I min': self.root.I_max.get(),
+                    'I #bins': self.root.I_bins.get(),
+                    'I scale': self.root.I_scale.get(),
+                    'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
+                }
                 if os.path.exists(path):
                     with open(path, mode='r', encoding='utf-8') as f:
                         old_data = yaml.load(f.read(), yaml.SafeLoader)
