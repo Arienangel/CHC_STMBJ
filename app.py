@@ -60,12 +60,12 @@ class Main:
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
-                STM_bj_GUI(tab)
+                tab.gui_object = STM_bj_GUI(tab)
             case 'I-Ebias':
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
-                I_Ebias_GUI(tab)
+                tab.gui_object = I_Ebias_GUI(tab)
             case 'I-Ewk':
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
@@ -74,14 +74,18 @@ class Main:
     def rename_tab(self):
         try:
             self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.tab_name.get())
-        except:
+        except Exception as E:
             return
 
     def close_tab(self):
+        if self.tabcontrol.select() == '': return
         try:
-            self.tabcontrol.forget("current")
-        except:
+            del self.tabcontrol.nametowidget(self.tabcontrol.select()).gui_object
+            plt.close()
+        except Exception as E:
             return
+        finally:
+            self.tabcontrol.forget("current")
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
