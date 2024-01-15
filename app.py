@@ -51,7 +51,6 @@ class Main:
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
         tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
-        tk.mainloop()
 
     def new_tab(self, experiment: str):
         name = self.tab_name.get() if self.tab_name.get() else experiment
@@ -336,22 +335,23 @@ class STM_bj_export_prompt:
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
     def run(self):
+        tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
             case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = STM_bj.get_displacement(self.root.G, **self.root.run_config).ravel()
                 if self.check_raw_G.get(): A = np.vstack([A, self.root.G.ravel()])
                 if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.root.G)).ravel()])
                 np.savetxt(path, A.T, delimiter=",")
             case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 G = np.log10(np.abs(self.root.hist_G.x)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_G.x
                 count = self.root.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.root.hist_G.height
                 np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
             case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.root.hist_GS.height.T
                 if self.check_2D_axis.get():
@@ -362,7 +362,7 @@ class STM_bj_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 3:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
                 settings = ['Data type', 'Recursive', 'Length', 'G upper', 'G lower', 'X=0@G=', 'Points/nm', 'Direction', 'G min', 'G max', 'G #bins', 'G scale', 'X min', 'X max', 'X #bins', 'X scale']
                 attributes = [
@@ -692,9 +692,10 @@ class I_Ebias_export_prompt:
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
     def run(self):
+        tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
             case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = self.root.V.ravel()
                 if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
@@ -705,7 +706,7 @@ class I_Ebias_export_prompt:
                 if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
                 np.savetxt(path, A.T, delimiter=",")
             case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.root.hist_GV.height.T
                 if self.check_GV_axis.get():
@@ -716,7 +717,7 @@ class I_Ebias_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.root.hist_IV.height.T
                 if self.check_IV_axis.get():
@@ -727,7 +728,7 @@ class I_Ebias_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 3:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
                 settings = ['Data type', 'Recursive', '#Segments', '#Files', 'V upper', 'Length', 'I unit', 'V unit', 'I min@V<', 'I limit', 'Zeroing', 'Direction', 'V min', 'V max', 'V #bins', 'V scale', 'G min', 'G max', 'G #bins', 'G scale', 'I min', 'I max', 'I #bins', 'I scale']
                 attributes = [
@@ -774,3 +775,4 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()  # PyInstaller
     matplotlib.use('TkAgg')
     GUI = Main()
+    tk.mainloop()
