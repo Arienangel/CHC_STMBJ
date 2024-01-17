@@ -1,3 +1,4 @@
+import datetime
 import glob
 import io
 import multiprocessing
@@ -129,8 +130,42 @@ def load_data(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_
     elif path.endswith('zip'):
         with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
             files = filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())
-            files = map(zf.read, files)
-            return np.concatenate(pool.map(__read_text, files), axis=-1)
+            return np.concatenate(pool.map(__read_text, map(zf.read, files)), axis=-1)
+
+
+def load_data_with_metadata(path: Union[str, bytes, list], threads: int = multiprocessing.cpu_count(), recursive: bool = False, **kwargs) -> pd.DataFrame:
+    """
+    Load data and metadata from text files.
+
+    Args:
+        path (str): directory of files, zip file, or txt file
+        threads (int, optional): number of CPU threads to use, default use all
+        recursive (bool, optional): read txt files in folder recursively
+
+    Returns:
+        out (DataFrame): Data read from the text files and unix time.
+    """
+    if isinstance(path, list):
+        return pd.concat(map(lambda path: load_data_with_metadata(path, threads, recursive), path), axis=0)
+    elif path.endswith('.txt'):
+        return pd.DataFrame([[np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['data', 'time'])
+    elif os.path.isdir(path):
+        df = pd.DataFrame()
+        df['files'] = glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)
+        if df['files'].index.size:
+            with multiprocessing.Pool(threads) as pool:
+                df['data'] = pd.Series(pool.map(__read_text, df['files'].apply(lambda f: open(os.path.join(path, f), 'rb').read()).values))
+                df['time'] = df['files'].apply(lambda f: os.path.getmtime(os.path.join(path, f)))
+                return df[['data', 'time']]
+        else:
+            return None
+    elif path.endswith('zip'):
+        df = pd.DataFrame()
+        with multiprocessing.Pool(threads) as pool, ZipFile(path) as zf:
+            df['files'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
+            df['data'] = pd.Series(pool.map(__read_text, df['files'].apply(lambda f: zf.read(f)).values))
+            df['time'] = df['files'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
+        return df[['data', 'time']]
 
 
 class Hist1D:
@@ -232,7 +267,7 @@ class Hist2D:
 
     @property
     def height_per_trace(self):
-        """ndarray: histogram height devided by trace"""
+        """ndarray: histogram height divided by trace"""
         return self.height / self.trace
 
     def add_data(self, x: np.ndarray, y: np.ndarray, set_clim: bool = True, **kwargs) -> None:

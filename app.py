@@ -156,15 +156,28 @@ class STM_bj_GUI(FileSystemEventHandler):
         tk.Label(self.frame_config, text='X scale: ').grid(row=4, column=6)
         tk.OptionMenu(self.frame_config, self.X_scale, *['log', 'linear']).grid(row=4, column=7)
         # row 5
-        tk.Label(self.frame_config, text='Colorbar: ').grid(row=5, column=0)
+        self.t_min = tk.DoubleVar(value=0)
+        self.t_max = tk.DoubleVar(value=3600)
+        self.t_bin_size = tk.IntVar(value=30)
+        self.t_scale = tk.StringVar(value='linear')
+        tk.Label(self.frame_config, text='t min: ').grid(row=5, column=0)
+        tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=5, column=1)
+        tk.Label(self.frame_config, text='t max: ').grid(row=5, column=2)
+        tk.Entry(self.frame_config, textvariable=self.t_max, justify='center').grid(row=5, column=3)
+        tk.Label(self.frame_config, text='t bin size: ').grid(row=5, column=4)
+        tk.Entry(self.frame_config, textvariable=self.t_bin_size, justify='center').grid(row=5, column=5)
+        tk.Label(self.frame_config, text='t scale: ').grid(row=5, column=6)
+        tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=5, column=7)
+        # row 6
+        tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
-        self.colorbar_conf.grid(row=5, column=1, columnspan=5, sticky='w')
+        self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
-        self.run_button.grid(row=5, column=6, padx=10)
+        self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
-        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=5, column=7)
-        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=5, column=8)
+        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -193,23 +206,30 @@ class STM_bj_GUI(FileSystemEventHandler):
                     item.destroy()
                 self.G = np.empty((0, self.extract_length.get()))
                 self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-                self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
-                try:
-                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                    if colorbar_conf != "\n":
-                        self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
-                except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
                 self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
                 self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                 self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
                 self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
                 self.auto_normalize_G = tk.BooleanVar(value=True)
                 tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
                 self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
                 self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                 self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
                 self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+                if self.is_raw.get() == 'raw':
+                    self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
+                    self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figures)
+                    self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
+                    self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figures, pack_toolbar=False)
+                    self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
+                try:
+                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                    if colorbar_conf != "\n":
+                        self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
+                        if self.is_raw.get() == 'raw': self.hist_Gt.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
+                except Exception as E:
+                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
                 self.run_config = {
                     "length": self.extract_length.get(),
                     "upper": self.upper.get(),
@@ -219,9 +239,11 @@ class STM_bj_GUI(FileSystemEventHandler):
                     "x_conversion": self.points_per_nm.get(),
                     'G_scale': self.G_scale.get(),
                     'X_scale': self.X_scale.get(),
+                    't_scale': self.t_scale.get(),
                     'recursive': self.directory_recursive.get()
                 }
                 self.status_traces.config(text=0)
+                self.time_init = 0
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
                 self.observer = Observer()
@@ -254,7 +276,12 @@ class STM_bj_GUI(FileSystemEventHandler):
         try:
             match self.is_raw.get():
                 case 'raw':
-                    extracted = STM_bj.extract_data(path, **self.run_config, threads=CPU_threads.get())
+                    df = STM_bj.load_data_with_metadata(path, **self.run_config, threads=CPU_threads.get())
+                    df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
+                    extracted = np.concatenate(df['extracted'].values)
+                    time = np.repeat(df['time'].values, df['extracted'].apply(lambda g: g.shape[0]).values)
+                    if self.time_init == 0: self.time_init = time.min()
+                    time = time - self.time_init
                 case 'cut':
                     extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
                     extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
@@ -267,6 +294,9 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.hist_GS.add_data(extracted)
             self.canvas_G.draw()
             self.canvas_GS.draw()
+            if self.is_raw.get() == 'raw':
+                self.hist_Gt.add_data(time, extracted)
+                self.canvas_Gt.draw()
             self.status_traces.config(text=self.hist_G.trace)
 
     def import_setting(self):
@@ -290,7 +320,11 @@ class STM_bj_GUI(FileSystemEventHandler):
             'X min': self.X_min,
             'X max': self.X_max,
             'X #bins': self.X_bins,
-            'X scale': self.X_scale
+            'X scale': self.X_scale,
+            't min': self.t_min,
+            't max': self.t_max,
+            't bin size': self.t_bin_size,
+            't scale': self.t_scale
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -404,6 +438,10 @@ class STM_bj_export_prompt:
                     'X max': self.root.X_max.get(),
                     'X #bins': self.root.X_bins.get(),
                     'X scale': self.root.X_scale.get(),
+                    't min': self.root.t_min.get(),
+                    't max': self.root.t_max.get(),
+                    't bin size': self.root.t_bin_size.get(),
+                    't scale': self.root.t_scale.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):
@@ -747,12 +785,12 @@ class I_Ebias_export_prompt:
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = self.root.V.ravel()
-                if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
-                if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.root.I.ravel())])
-                if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
                 G = I_Ebias.conductance(self.root.I, self.root.V).ravel()
                 if self.check_raw_G.get(): A = np.vstack([A, G])
                 if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
+                if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
+                if self.check_raw_absI.get(): A = np.vstack([A, np.abs(self.root.I.ravel())])
+                if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
                 np.savetxt(path, A.T, delimiter=",")
             case 1:
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
