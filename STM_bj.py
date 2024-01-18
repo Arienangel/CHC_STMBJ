@@ -138,12 +138,11 @@ class Hist_Gt(Hist2D):
         super().__init__(xlim, ylim, int(np.abs(xlim[1] - xlim[0]) // size_x_bin), num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
-        self.colorbar.set_label('Count/trace')
+        self.colorbar.set_label(f'Count/trace/{size_x_bin}s')
         self.trace = np.zeros(self.x.size)
         self.ax.set_xticks(np.arange(0, self.x_max, 600))
         self.ax.set_xticks(np.arange(0, self.x_max, 60), minor=True)
-        for t in np.arange(0, self.x_max + 300, 300):
-            self.ax.axvline(t, color='black', linewidth=0.5)
+        self.ax.xaxis.grid(visible=True, which='major')
 
     @property
     def height_per_trace(self):

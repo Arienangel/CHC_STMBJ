@@ -6,15 +6,16 @@ import scipy.signal
 from baseclass import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, length: int = 1200, offset: list = [0, 0], units: list = [1e-6, 1], **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], **kwargs):
     '''
     Extract traces from raw_data
 
     Args:
         raw_data (ndarray | str): 2D array (I, V) contains raw data, directory of files, zip file, or txt file
         height (float, optional): peak height of E bias
-        length (int, optional): length of trace
-        offset (list, optional): offset length to first peak and final peak
+        length_segment (int, optional): length of one segment
+        num_segment (int, oprional):numbber of segments
+        offset (list, optional): length from first point to first peak and last point to last peak
         units (list, optional): default: (μA, V)
 
     Returns:
@@ -24,10 +25,10 @@ def extract_data(raw_data: Union[np.ndarray, str, list], height: float = 1.45, l
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
     I, V = raw_data * np.expand_dims(units, 1)
     peaks, *_ = scipy.signal.find_peaks(abs(V), height=height)
-    start, end = peaks[:-1].ravel(), peaks[1:].ravel()
-    f = list(map(lambda x: x + length - sum(offset) in end, start))
-    if len(f) >= 1: return np.stack([[I[i:j], V[i:j]] for i, j in zip(start[f] - offset[0], start[f] - offset[0] + length)], axis=1)
-    else: return np.empty((2, 0, length))
+    start = peaks[np.isin(peaks + num_segment * length_segment, peaks)] - offset[0]
+    start = start[(start >= 0) & (start + num_segment * length_segment + sum(offset) < I.size)]
+    end = start + num_segment * length_segment + sum(offset)
+    return np.stack([[I[i:j], V[i:j]] for i, j in zip(start, end) if np.where((peaks >= i) & (peaks <= j), 1, 0).sum() == num_segment + 1], axis=1)
 
 
 def noise_remove(I: np.ndarray, V: np.ndarray, V_range: float = None, I_max: float = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
@@ -125,3 +126,45 @@ class Hist_IV(Hist2D):
             V (ndarray): 2D Ebias array with shape (trace, length)
         """
         super().add_data(V, np.abs(I), **kwargs)
+
+
+class Hist_IVt(Hist2D):
+
+    def __init__(self,
+                 xlim: tuple[float, float] = (0, 0.2),
+                 y1lim: tuple[float, float] = (1e-11, 1e-5),
+                 y2lim: tuple[float, float] = (1e-11, 1e-5),
+                 num_x_bin: float = 1000,
+                 num_y1_bin: float = 300,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 y1scale: Literal['linear', 'log'] = 'log',
+                 y2scale: Literal['linear', 'log'] = 'linear',
+                 x_conversion: float = 40000,
+                 **kwargs) -> None:
+        super().__init__(xlim, y1lim, num_x_bin, num_y1_bin, xscale, y1scale, **kwargs)
+        self.colorbar.remove()
+        self.ax2 = self.ax.twinx()
+        self.ax2.axhline(0, color='black', linestyle='dashed')
+        self.plot2 = pd.Series()
+        self.ax2.set_ylim(*sorted(y2lim))
+        self.ax2.set_yscale(y2scale)
+        self.ax.set_xlabel('Time (s)')
+        self.ax.set_ylabel('Current (A)')
+        self.ax2.set_ylabel('$E_{bias}\/(V)$')
+        self.x_conversion = x_conversion
+
+    def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
+        """
+        Add data into 2D histogram (GV)
+
+        Args:
+            I (ndarray): 2D I array with shape (trace, length)
+            V (ndarray): 2D Ebias array with shape (trace, length)
+        """
+        t = np.mgrid[0:I.shape[0]:1, 0:I.shape[1]:1][1] / self.x_conversion
+        super().add_data(t, np.abs(I), **kwargs)
+        V = pd.Series(list(V)).drop_duplicates()
+        V_new = V[~V.isin(self.plot2)]
+        if V_new.size > 0:
+            self.ax2.plot(t[0], np.stack(V_new).T, color='black', linewidth=0.5)
+            self.plot2 = pd.concat([self.plot2, V_new])

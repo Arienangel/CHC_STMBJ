@@ -77,14 +77,7 @@ class Main:
             return
 
     def close_tab(self):
-        if self.tabcontrol.select() == '': return
-        try:
-            del self.tabcontrol.nametowidget(self.tabcontrol.select()).gui_object
-            plt.close()
-        except Exception as E:
-            return
-        finally:
-            self.tabcontrol.forget("current")
+        self.tabcontrol.forget("current")
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
@@ -101,7 +94,6 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.frame_config.pack(side='top', anchor='w')
         # row 0
         self.directory_path = tk.StringVar()
-        self.directory_recursive = tk.BooleanVar(value=False)
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
         tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
@@ -111,6 +103,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.upper = tk.DoubleVar(value=3.2)
         self.lower = tk.DoubleVar(value=1e-6)
         self.is_raw = tk.StringVar(value='raw')
+        self.directory_recursive = tk.BooleanVar(value=False)
         tk.Label(self.frame_config, text='Length: ').grid(row=1, column=0)
         tk.Entry(self.frame_config, textvariable=self.extract_length, justify='center').grid(row=1, column=1)
         tk.Label(self.frame_config, text='G upper: ').grid(row=1, column=2)
@@ -178,6 +171,16 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.is_run = False
         tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
         tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
+        # is_plot frame
+        self.frame_is_plot = tk.Frame(self.window)
+        self.frame_is_plot.pack(side='top', anchor='w')
+        self.plot_hist_G = tk.BooleanVar(value=True)
+        self.plot_hist_GS = tk.BooleanVar(value=True)
+        self.plot_hist_Gt = tk.BooleanVar(value=False)
+        tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram G', variable=self.plot_hist_G).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram GS', variable=self.plot_hist_GS).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram Gt', variable=self.plot_hist_Gt).pack(side='left')
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -201,23 +204,27 @@ class STM_bj_GUI(FileSystemEventHandler):
                     except Exception as E:
                         tkinter.messagebox.showerror('Error', 'Invalid directory')
                         return
-                plt.close()
                 for item in self.frame_figures.winfo_children():
                     item.destroy()
                 self.G = np.empty((0, self.extract_length.get()))
-                self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-                self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
-                self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
-                self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                self.auto_normalize_G = tk.BooleanVar(value=True)
-                tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
-                self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
-                self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
-                self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
-                self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
-                if self.is_raw.get() == 'raw':
+                # hist G
+                if self.plot_hist_G.get():
+                    self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
+                    self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                    self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
+                    self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
+                    self.auto_normalize_G = tk.BooleanVar(value=True)
+                    tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                # hist GS
+                if self.plot_hist_GS.get():
+                    self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
+                    self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
+                    self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                    self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
+                    self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+                # hist Gt
+                if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get():
                     self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
                     self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figures)
                     self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
@@ -226,8 +233,9 @@ class STM_bj_GUI(FileSystemEventHandler):
                 try:
                     colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                     if colorbar_conf != "\n":
-                        self.hist_GS.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
-                        if self.is_raw.get() == 'raw': self.hist_Gt.plot.set_cmap(cmap=LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256))
+                        cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                        if self.plot_hist_GS.get(): self.hist_GS.plot.set_cmap(cmap=cmap)
+                        if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get(): self.hist_Gt.plot.set_cmap(cmap=cmap)
                 except Exception as E:
                     tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
                 self.run_config = {
@@ -240,7 +248,11 @@ class STM_bj_GUI(FileSystemEventHandler):
                     'G_scale': self.G_scale.get(),
                     'X_scale': self.X_scale.get(),
                     't_scale': self.t_scale.get(),
-                    'recursive': self.directory_recursive.get()
+                    'recursive': self.directory_recursive.get(),
+                    'data_type': self.is_raw.get(),
+                    'hist_G': self.plot_hist_G.get(),
+                    'hist_GS': self.plot_hist_GS.get(),
+                    'hist_Gt': self.plot_hist_Gt.get()
                 }
                 self.status_traces.config(text=0)
                 self.time_init = 0
@@ -290,14 +302,16 @@ class STM_bj_GUI(FileSystemEventHandler):
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
-            self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
-            self.hist_GS.add_data(extracted)
-            self.canvas_G.draw()
-            self.canvas_GS.draw()
-            if self.is_raw.get() == 'raw':
+            if self.run_config['hist_G']:
+                self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
+                self.canvas_G.draw()
+            if self.run_config['hist_GS']:
+                self.hist_GS.add_data(extracted)
+                self.canvas_GS.draw()
+            if (self.run_config['data_type'] == 'raw') & self.run_config['hist_Gt']:
                 self.hist_Gt.add_data(time, extracted)
                 self.canvas_Gt.draw()
-            self.status_traces.config(text=self.hist_G.trace)
+            self.status_traces.config(text=self.G.shape[0])
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
@@ -324,7 +338,10 @@ class STM_bj_GUI(FileSystemEventHandler):
             't min': self.t_min,
             't max': self.t_max,
             't bin size': self.t_bin_size,
-            't scale': self.t_scale
+            't scale': self.t_scale,
+            'hist_G': self.plot_hist_G,
+            'hist_GS': self.plot_hist_GS,
+            'hist_Gt': self.plot_hist_Gt
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -442,6 +459,9 @@ class STM_bj_export_prompt:
                     't max': self.root.t_max.get(),
                     't bin size': self.root.t_bin_size.get(),
                     't scale': self.root.t_scale.get(),
+                    'hist_G': self.root.plot_hist_G.get(),
+                    'hist_GS': self.root.plot_hist_GS.get(),
+                    'hist_Gt': self.root.plot_hist_Gt.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):
@@ -466,24 +486,17 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.frame_config.pack(side='top', anchor='w')
         # row 0
         self.directory_path = tk.StringVar()
-        self.directory_recursive = tk.BooleanVar(value=False)
-        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
-        self.num_segments = tk.IntVar(value=4)  # number of segments in one cycle
-        tk.Label(self.frame_config, text='Path: ').grid(row=0, column=2)
-        tk.Entry(self.frame_config, textvariable=self.directory_path, width=50).grid(row=0, column=3, columnspan=3)
-        tk.Label(self.frame_config, text='#Segments\nin last #Files: ').grid(row=0, column=0)
-        frame_folder_setting = tk.Frame(self.frame_config)
-        frame_folder_setting.grid(row=0, column=1)
-        tk.Entry(frame_folder_setting, textvariable=self.num_segments, justify='center', width=10).pack(side='left')
-        tk.Entry(frame_folder_setting, textvariable=self.num_files, justify='center', width=10).pack(side='left')
-        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6, padx=5)
-        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7)
+        tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
+        tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.V_upper = tk.DoubleVar(value=1.45)
         self.length = tk.IntVar(value=1200)
         self.I_unit = tk.DoubleVar(value=1e-6)
         self.V_unit = tk.DoubleVar(value=1)
         self.is_raw = tk.StringVar(value='raw')
+        self.directory_recursive = tk.BooleanVar(value=False)
         tk.Label(self.frame_config, text='V upper: ').grid(row=1, column=0)
         tk.Entry(self.frame_config, textvariable=self.V_upper, justify='center').grid(row=1, column=1)
         tk.Label(self.frame_config, text='Length: ').grid(row=1, column=2)
@@ -508,54 +521,87 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.check_zeroing = tk.BooleanVar(value=True)
         tk.Checkbutton(self.frame_config, variable=self.check_zeroing, text='Zeroing').grid(row=2, column=7, sticky='w')
         # row 3
+        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
+        self.num_segment = tk.IntVar(value=4)  # number of segments in one cycle
+        self.sampling_rate = tk.IntVar(value=40000)
+        tk.Label(self.frame_config, text='#Segments: ').grid(row=3, column=0)
+        tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=3, column=1)
+        tk.Label(self.frame_config, text='#Files: ').grid(row=3, column=2)
+        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=3, column=3)
+        tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=3, column=4)
+        tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=3, column=5)
+        # row 4
         self.V_min = tk.DoubleVar(value=-1.5)
         self.V_max = tk.DoubleVar(value=1.5)
         self.V_bins = tk.IntVar(value=300)
         self.V_scale = tk.StringVar(value='linear')
-        tk.Label(self.frame_config, text='V min: ').grid(row=3, column=0)
-        tk.Entry(self.frame_config, textvariable=self.V_min, justify='center').grid(row=3, column=1)
-        tk.Label(self.frame_config, text='V max: ').grid(row=3, column=2)
-        tk.Entry(self.frame_config, textvariable=self.V_max, justify='center').grid(row=3, column=3)
-        tk.Label(self.frame_config, text='V #bins: ').grid(row=3, column=4)
-        tk.Entry(self.frame_config, textvariable=self.V_bins, justify='center').grid(row=3, column=5)
-        tk.Label(self.frame_config, text='V scale: ').grid(row=3, column=6)
-        tk.OptionMenu(self.frame_config, self.V_scale, *['log', 'linear']).grid(row=3, column=7)
-        # row 4
+        tk.Label(self.frame_config, text='V min: ').grid(row=4, column=0)
+        tk.Entry(self.frame_config, textvariable=self.V_min, justify='center').grid(row=4, column=1)
+        tk.Label(self.frame_config, text='V max: ').grid(row=4, column=2)
+        tk.Entry(self.frame_config, textvariable=self.V_max, justify='center').grid(row=4, column=3)
+        tk.Label(self.frame_config, text='V #bins: ').grid(row=4, column=4)
+        tk.Entry(self.frame_config, textvariable=self.V_bins, justify='center').grid(row=4, column=5)
+        tk.Label(self.frame_config, text='V scale: ').grid(row=4, column=6)
+        tk.OptionMenu(self.frame_config, self.V_scale, *['log', 'linear']).grid(row=4, column=7)
+        # row 5
         self.G_min = tk.DoubleVar(value=1e-5)
         self.G_max = tk.DoubleVar(value=1e-1)
         self.G_bins = tk.IntVar(value=400)
         self.G_scale = tk.StringVar(value='log')
-        tk.Label(self.frame_config, text='G min: ').grid(row=4, column=0)
-        tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=4, column=1)
-        tk.Label(self.frame_config, text='G max: ').grid(row=4, column=2)
-        tk.Entry(self.frame_config, textvariable=self.G_max, justify='center').grid(row=4, column=3)
-        tk.Label(self.frame_config, text='G #bins: ').grid(row=4, column=4)
-        tk.Entry(self.frame_config, textvariable=self.G_bins, justify='center').grid(row=4, column=5)
-        tk.Label(self.frame_config, text='G scale: ').grid(row=4, column=6)
-        tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=4, column=7)
-        # row 5
+        tk.Label(self.frame_config, text='G min: ').grid(row=5, column=0)
+        tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=5, column=1)
+        tk.Label(self.frame_config, text='G max: ').grid(row=5, column=2)
+        tk.Entry(self.frame_config, textvariable=self.G_max, justify='center').grid(row=5, column=3)
+        tk.Label(self.frame_config, text='G #bins: ').grid(row=5, column=4)
+        tk.Entry(self.frame_config, textvariable=self.G_bins, justify='center').grid(row=5, column=5)
+        tk.Label(self.frame_config, text='G scale: ').grid(row=5, column=6)
+        tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=5, column=7)
+        # row 6
         self.I_min = tk.DoubleVar(value=1e-11)
         self.I_max = tk.DoubleVar(value=1e-5)
         self.I_bins = tk.IntVar(value=600)
         self.I_scale = tk.StringVar(value='log')
-        tk.Label(self.frame_config, text='I min: ').grid(row=5, column=0)
-        tk.Entry(self.frame_config, textvariable=self.I_min, justify='center').grid(row=5, column=1)
-        tk.Label(self.frame_config, text='I max: ').grid(row=5, column=2)
-        tk.Entry(self.frame_config, textvariable=self.I_max, justify='center').grid(row=5, column=3)
-        tk.Label(self.frame_config, text='I #bins: ').grid(row=5, column=4)
-        tk.Entry(self.frame_config, textvariable=self.I_bins, justify='center').grid(row=5, column=5)
-        tk.Label(self.frame_config, text='I scale: ').grid(row=5, column=6)
-        tk.OptionMenu(self.frame_config, self.I_scale, *['log', 'linear']).grid(row=5, column=7)
-        # row 6
-        tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
+        tk.Label(self.frame_config, text='I min: ').grid(row=6, column=0)
+        tk.Entry(self.frame_config, textvariable=self.I_min, justify='center').grid(row=6, column=1)
+        tk.Label(self.frame_config, text='I max: ').grid(row=6, column=2)
+        tk.Entry(self.frame_config, textvariable=self.I_max, justify='center').grid(row=6, column=3)
+        tk.Label(self.frame_config, text='I #bins: ').grid(row=6, column=4)
+        tk.Entry(self.frame_config, textvariable=self.I_bins, justify='center').grid(row=6, column=5)
+        tk.Label(self.frame_config, text='I scale: ').grid(row=6, column=6)
+        tk.OptionMenu(self.frame_config, self.I_scale, *['log', 'linear']).grid(row=6, column=7)
+        # row 7
+        self.t_min = tk.DoubleVar(value=0)
+        self.t_max = tk.DoubleVar(value=0.18)
+        self.t_bins = tk.IntVar(value=1800)
+        self.t_scale = tk.StringVar(value='linear')
+        tk.Label(self.frame_config, text='t min: ').grid(row=7, column=0)
+        tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=7, column=1)
+        tk.Label(self.frame_config, text='t max: ').grid(row=7, column=2)
+        tk.Entry(self.frame_config, textvariable=self.t_max, justify='center').grid(row=7, column=3)
+        tk.Label(self.frame_config, text='t #bins: ').grid(row=7, column=4)
+        tk.Entry(self.frame_config, textvariable=self.t_bins, justify='center').grid(row=7, column=5)
+        tk.Label(self.frame_config, text='t scale: ').grid(row=7, column=6)
+        tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=7, column=7)
+        # row 8
+        tk.Label(self.frame_config, text='Colorbar: ').grid(row=8, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
-        self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
+        self.colorbar_conf.grid(row=8, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
-        self.run_button.grid(row=6, column=6, padx=10)
+        self.run_button.grid(row=8, column=6, padx=10)
         self.is_run = False
-        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
-        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
+        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=8, column=7)
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=8, column=8)
+        # is_plot frame
+        self.frame_is_plot = tk.Frame(self.window)
+        self.frame_is_plot.pack(side='top', anchor='w')
+        self.plot_hist_GV = tk.BooleanVar(value=True)
+        self.plot_hist_IV = tk.BooleanVar(value=True)
+        self.plot_hist_IVt = tk.BooleanVar(value=False)
+        tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram IV', variable=self.plot_hist_IV).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram IVt', variable=self.plot_hist_IVt).pack(side='left')
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -579,32 +625,43 @@ class I_Ebias_GUI(FileSystemEventHandler):
                     except Exception as E:
                         tkinter.messagebox.showerror('Error', 'Invalid directory')
                         return
-                plt.close()
                 for item in self.frame_figure.winfo_children():
                     item.destroy()
                 self.I = np.empty((0, self.length.get()))
                 self.V = np.empty((0, self.length.get()))
-                self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
-                self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
+                #hist GV
+                if self.plot_hist_GV.get():
+                    self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
+                    self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
+                    self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                    self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
+                    self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
+                # hist IV
+                if self.plot_hist_IV.get():
+                    self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
+                    self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
+                    self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                    self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
+                    self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
+                # hist IVt
+                if self.plot_hist_IVt.get():
+                    self.hist_IVt = I_Ebias.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get())
+                    self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
+                    self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
+                    self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
+                    self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
                 try:
                     colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                     if colorbar_conf != "\n":
                         cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
-                        self.hist_GV.plot.set_cmap(cmap=cmap)
-                        self.hist_IV.plot.set_cmap(cmap=cmap)
+                        if self.plot_hist_GV.get(): self.hist_GV.plot.set_cmap(cmap=cmap)
+                        if self.plot_hist_IV.get(): self.hist_IV.plot.set_cmap(cmap=cmap)
+                        if self.plot_hist_IVt.get(): self.hist_IVt.plot.set_cmap(cmap=cmap)
                 except Exception as E:
                     tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
-                self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
-                self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
-                self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
-                self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
-                self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
-                self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
                 self.run_config = {
                     "height": self.V_upper.get(),
-                    "length": self.length.get(),
+                    "length_segment": self.length.get(),
                     "units": (self.I_unit.get(), self.V_unit.get()),
                     "V_range": self.V_range.get(),
                     "I_max": self.I_limit.get(),
@@ -613,7 +670,12 @@ class I_Ebias_GUI(FileSystemEventHandler):
                     'I_scale': self.I_scale.get(),
                     'recursive': self.directory_recursive.get(),
                     'num_files': self.num_files.get(),
-                    'zeroing': self.check_zeroing.get()
+                    'num_segment': self.num_segment.get(),
+                    'zeroing': self.check_zeroing.get(),
+                    'data_type': self.is_raw.get(),
+                    'hist_GV': self.plot_hist_GV.get(),
+                    'hist_IV': self.plot_hist_IV.get(),
+                    'hist_IVt': self.plot_hist_IVt.get()
                 }
                 self.pending = list()
                 self.status_traces.config(text=0)
@@ -648,16 +710,23 @@ class I_Ebias_GUI(FileSystemEventHandler):
             self.status_last_file.config(text="(Multiple)")
         self.pending.append(path)
         try:
-            match self.is_raw.get():
+            match self.run_config['data_type']:
                 case 'raw':
-                    I, V = I_Ebias.extract_data(self.pending[-self.num_files.get():], **self.run_config, threads=CPU_threads.get())
+                    I_full, V_full = I_Ebias.extract_data(self.pending[-self.num_files.get():],
+                                                          height=self.run_config['height'],
+                                                          length_segment=self.run_config['length_segment'],
+                                                          num_segment=self.run_config['num_segment'],
+                                                          offset=[self.run_config['length_segment'], self.run_config['length_segment']],
+                                                          units=self.run_config['units'],
+                                                          threads=CPU_threads.get())
+                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), height=self.run_config['height'], length=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
                 case 'cut':
                     extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
-        if I.shape[0] < self.num_segments.get(): return
+        if I_full.shape[0] == 0: return
         else:
             I, V = I_Ebias.noise_remove(I, V, **self.run_config)
             if self.run_config['zeroing']: I, V = I_Ebias.zeroing(I, V)
@@ -667,13 +736,18 @@ class I_Ebias_GUI(FileSystemEventHandler):
                         I, V = I_Ebias.split_scan_direction(I, V)[0]
                     case '+→-':
                         I, V = I_Ebias.split_scan_direction(I, V)[1]
-                self.hist_GV.add_data(I, V)
-                self.hist_IV.add_data(I, V)
-                self.canvas_GV.draw()
-                self.canvas_IV.draw()
-                self.status_traces.config(text=self.hist_GV.trace)
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+                if self.run_config['hist_GV']:
+                    self.hist_GV.add_data(I, V)
+                    self.canvas_GV.draw()
+                if self.run_config['hist_IV']:
+                    self.hist_IV.add_data(I, V)
+                    self.canvas_IV.draw()
+                if self.run_config['hist_IVt']:
+                    self.hist_IVt.add_data(I_full, V_full)
+                    self.canvas_IVt.draw()
+                self.status_traces.config(text=self.I.shape[0])
             self.pending.clear()
 
     def import_setting(self):
@@ -684,8 +758,9 @@ class I_Ebias_GUI(FileSystemEventHandler):
         settings = {
             'Data type': self.is_raw,
             'Recursive': self.directory_recursive,
-            '#Segments': self.num_segments,
+            '#Segments': self.num_segment,
             '#Files': self.num_files,
+            'Sampling rate': self.sampling_rate,
             'V upper': self.V_upper,
             'Length': self.length,
             'I unit': self.I_unit,
@@ -706,6 +781,12 @@ class I_Ebias_GUI(FileSystemEventHandler):
             'I min': self.I_max,
             'I #bins': self.I_bins,
             'I scale': self.I_scale,
+            't max': self.t_min,
+            't min': self.t_max,
+            't #bins': self.t_bins,
+            't scale': self.t_scale,
+            'hist_GV': self.plot_hist_GV,
+            'hist_IV': self.plot_hist_IV
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -820,8 +901,9 @@ class I_Ebias_export_prompt:
                 data = {
                     'Data type': self.root.is_raw.get(),
                     'Recursive': self.root.directory_recursive.get(),
-                    '#Segments': self.root.num_segments.get(),
+                    '#Segments': self.root.num_segment.get(),
                     '#Files': self.root.num_files.get(),
+                    'Sampling rate': self.root.sampling_rate.get(),
                     'V upper': self.root.V_upper.get(),
                     'Length': self.root.length.get(),
                     'I unit': self.root.I_unit.get(),
@@ -842,6 +924,12 @@ class I_Ebias_export_prompt:
                     'I min': self.root.I_max.get(),
                     'I #bins': self.root.I_bins.get(),
                     'I scale': self.root.I_scale.get(),
+                    't max': self.root.t_min.get(),
+                    't min': self.root.t_max.get(),
+                    't #bins': self.root.t_bins.get(),
+                    't scale': self.root.t_scale.get(),
+                    'hist_GV': self.root.plot_hist_GV.get(),
+                    'hist_IV': self.root.plot_hist_IV.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):
