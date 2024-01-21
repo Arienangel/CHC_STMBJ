@@ -719,7 +719,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
                                                           offset=[self.run_config['length_segment'], self.run_config['length_segment']],
                                                           units=self.run_config['units'],
                                                           threads=CPU_threads.get())
-                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), height=self.run_config['height'], length=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
+                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), height=self.run_config['height'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
                 case 'cut':
                     extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
