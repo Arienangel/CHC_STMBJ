@@ -255,7 +255,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     'hist_Gt': self.plot_hist_Gt.get()
                 }
                 self.status_traces.config(text=0)
-                self.time_init = 0
+                self.time_init = None
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
                 self.observer = Observer()
@@ -270,10 +270,13 @@ class STM_bj_GUI(FileSystemEventHandler):
                 threading.Thread(target=self.observer.stop).start()
 
     def on_created(self, event):
+        while True:
+            if self.time_init is not None: break
+            else: time.sleep(0.5)
         if isinstance(event, FileCreatedEvent):
             if (event.src_path.endswith('.txt')):
                 try:
-                    if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
+                    if os.path.getsize(event.src_path) == 0: time.sleep(0.5)
                     self.add_data(event.src_path)
                 except Exception as E:
                     if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
@@ -282,7 +285,9 @@ class STM_bj_GUI(FileSystemEventHandler):
         if isinstance(path, str):
             self.status_last_file.config(text=path)
             if os.path.isdir(path):
-                if not os.listdir(path): return  # empty directory
+                if not os.listdir(path):  # empty directory
+                    self.time_init = 0
+                    return
         else:
             self.status_last_file.config(text="(Multiple)")
         try:
@@ -292,7 +297,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
                     extracted = np.concatenate(df['extracted'].values)
                     time = np.repeat(df['time'].values, df['extracted'].apply(lambda g: g.shape[0]).values)
-                    if self.time_init == 0: self.time_init = time.min()
+                    if not self.time_init: self.time_init = time.min()
                     time = time - self.time_init
                 case 'cut':
                     extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
