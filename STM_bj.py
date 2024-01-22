@@ -136,11 +136,11 @@ class Hist_Gt(Hist2D):
 
     def __init__(self, xlim: tuple[float, float] = (0, 3600), ylim: tuple[float, float] = (1e-5, 10**0.5), size_x_bin: float = 30, num_y_bin: float = 550, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
         super().__init__(xlim, ylim, int(np.abs(xlim[1] - xlim[0]) // size_x_bin), num_y_bin, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('Time (s)')
+        self.ax.set_xlabel('Time (min)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
         self.colorbar.set_label(f'Count/trace/{size_x_bin}s')
         self.trace = np.zeros(self.x.size)
-        self.ax.set_xticks(np.arange(0, self.x_max, 600))
+        self.ax.set_xticks(np.arange(0, self.x_max, 600), np.arange(0, self.x_max / 60, 10, dtype=int))
         self.ax.set_xticks(np.arange(0, self.x_max, 60), minor=True)
         self.ax.xaxis.grid(visible=True, which='major')
 
