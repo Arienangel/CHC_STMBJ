@@ -11,8 +11,6 @@ import tkinter.messagebox
 from tkinter import ttk
 
 import matplotlib
-import matplotlib.axes
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yaml
@@ -40,12 +38,9 @@ class Main:
         self.tab_name = tk.StringVar()
         tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
         tk.Button(frame, text='Apply', command=self.rename_tab).pack(side='left', padx=2)
-        global CPU_threads, debug
-        CPU_threads = tk.IntVar(value=multiprocessing.cpu_count())
+        global debug
         debug = tk.BooleanVar(value=False)
         self.always_on_top = tk.BooleanVar(value=False)
-        tk.Label(frame, text='CPU threads: ').pack(side='left')
-        tk.Entry(frame, textvariable=CPU_threads, width=10, justify='center').pack(side='left')
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
         tk.Checkbutton(frame, variable=debug, text="Debug").pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
@@ -293,17 +288,17 @@ class STM_bj_GUI(FileSystemEventHandler):
         try:
             match self.is_raw.get():
                 case 'raw':
-                    df = STM_bj.load_data_with_metadata(path, **self.run_config, threads=CPU_threads.get())
+                    df = STM_bj.load_data_with_metadata(path, **self.run_config)
                     df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
                     extracted = np.concatenate(df['extracted'].values)
                     time = np.repeat(df['time'].values, df['extracted'].apply(lambda g: g.shape[0]).values)
                     if not self.time_init: self.time_init = time.min()
                     time = time - self.time_init
                 case 'cut':
-                    extracted = STM_bj.load_data(path, **self.run_config, threads=CPU_threads.get())
+                    extracted = STM_bj.load_data(path, **self.run_config)
                     extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
-            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
+            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files\n' + type(E).__name__ + '\n' + str(E.args))
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
@@ -722,11 +717,10 @@ class I_Ebias_GUI(FileSystemEventHandler):
                                                           length_segment=self.run_config['length_segment'],
                                                           num_segment=self.run_config['num_segment'],
                                                           offset=[self.run_config['length_segment'], self.run_config['length_segment']],
-                                                          units=self.run_config['units'],
-                                                          threads=CPU_threads.get())
+                                                          units=self.run_config['units'])
                     I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), height=self.run_config['height'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
                 case 'cut':
-                    extracted = I_Ebias.load_data(path, **self.run_config, threads=CPU_threads.get())
+                    extracted = I_Ebias.load_data(path, **self.run_config)
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
