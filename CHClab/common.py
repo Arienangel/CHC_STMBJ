@@ -4,7 +4,6 @@ from typing import Literal, Union
 from zipfile import ZipFile
 
 import datatable as dt
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,8 +12,6 @@ import scipy.signal
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.constants import physical_constants
 
-matplotlib.rc('font', size=16)
-matplotlib.rc("figure", autolayout=True)
 cmap = LinearSegmentedColormap('Cmap',
                                segmentdata={
                                    'red': [[0, 1, 1], [0.05, 0, 0], [0.1, 0, 0], [0.15, 1, 1], [0.3, 1, 1], [1, 1, 1]],

@@ -6,7 +6,7 @@ import scipy.interpolate
 import scipy.optimize
 import scipy.signal
 
-from baseclass import *
+from .common import *
 
 
 def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset: tuple[float, float] = (10, 10), **kwargs) -> np.ndarray:

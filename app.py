@@ -19,8 +19,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-import I_Ebias
-import STM_bj
+from CHClab import STM_bj, I_Ebias
 
 
 class Main:
