@@ -62,6 +62,11 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
     return (X - np.expand_dims(x, axis=-1)) / x_conversion
 
 
+def get_correlation_matrix(G: np.ndarray, bins: np.ndarray):
+    N = np.apply_along_axis(lambda g: np.histogram(g, bins)[0], 1, G)
+    return np.corrcoef(N, rowvar=False)
+
+
 class Hist_G(Hist1D):
 
     def __init__(self, xlim: tuple[float, float] = (1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
@@ -163,3 +168,22 @@ class Hist_Gt(Hist2D):
         self.plot.set_array(height_per_trace.T)
         if set_clim:
             self.plot.set_clim(0, height_per_trace.max())
+
+
+class Hist_Correlation(Hist2D):
+
+    def __init__(self, xlim: tuple[float, float] = (1e-5, 10**0.5), num_bin: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
+        super().__init__(xlim, xlim, num_bin, num_bin, x_scale, x_scale, **kwargs)
+        self.ax.set_xlabel('Conductance ($G/G_0$)')
+        self.ax.set_ylabel('Conductance ($G/G_0$)')
+        self.plot.set_cmap(cmap='seismic', )
+        self.plot.set_norm(norm=matplotlib.colors.SymLogNorm(0.1, 1, -1, 1))
+
+    def add_data(self, G: np.ndarray, **kwargs) -> None:
+        N = np.apply_along_axis(lambda g: np.histogram(g, self.x_bins)[0], 1, G)
+        if hasattr(self, 'N'):
+            self.N = np.concatenate([self.N, N], axis=0)
+        else:
+            self.N = N
+        self.height = np.corrcoef(self.N, rowvar=False)
+        self.plot.set_array(self.height.T)
