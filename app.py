@@ -171,10 +171,12 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.plot_hist_G = tk.BooleanVar(value=True)
         self.plot_hist_GS = tk.BooleanVar(value=True)
         self.plot_hist_Gt = tk.BooleanVar(value=False)
+        self.plot_2DCH = tk.BooleanVar(value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram G', variable=self.plot_hist_G).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram GS', variable=self.plot_hist_GS).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram Gt', variable=self.plot_hist_Gt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Cross-correlation histogram ', variable=self.plot_2DCH).pack(side='left')
         # figure frame
         self.frame_figures = tk.Frame(self.window)
         self.frame_figures.pack(side='top', anchor='w')
@@ -224,6 +226,13 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figures, pack_toolbar=False)
                     self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
+                # hist 2DCH
+                if self.plot_2DCH.get():
+                    self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.canvas_2DCH = FigureCanvasTkAgg(self.hist_2DCH.fig, self.frame_figures)
+                    self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
+                    self.navtool_Gt = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
+                    self.navtool_Gt.grid(row=1, column=15, columnspan=4, sticky='w')
                 try:
                     colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                     if colorbar_conf != "\n":
@@ -246,7 +255,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                     'data_type': self.is_raw.get(),
                     'hist_G': self.plot_hist_G.get(),
                     'hist_GS': self.plot_hist_GS.get(),
-                    'hist_Gt': self.plot_hist_Gt.get()
+                    'hist_Gt': self.plot_hist_Gt.get(),
+                    'hist_2DCH': self.plot_2DCH.get()
                 }
                 self.status_traces.config(text=0)
                 self.time_init = None
@@ -310,6 +320,9 @@ class STM_bj_GUI(FileSystemEventHandler):
             if (self.run_config['data_type'] == 'raw') & self.run_config['hist_Gt']:
                 self.hist_Gt.add_data(time, extracted)
                 self.canvas_Gt.draw()
+            if self.run_config['hist_2DCH']:
+                self.hist_2DCH.add_data(extracted)
+                self.canvas_2DCH.draw()
             self.status_traces.config(text=self.G.shape[0])
 
     def import_setting(self):
@@ -340,7 +353,8 @@ class STM_bj_GUI(FileSystemEventHandler):
             't scale': self.t_scale,
             'hist_G': self.plot_hist_G,
             'hist_GS': self.plot_hist_GS,
-            'hist_Gt': self.plot_hist_Gt
+            'hist_Gt': self.plot_hist_Gt,
+            'hist_2DCH': self.plot_2DCH
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -461,6 +475,7 @@ class STM_bj_export_prompt:
                     'hist_G': self.root.plot_hist_G.get(),
                     'hist_GS': self.root.plot_hist_GS.get(),
                     'hist_Gt': self.root.plot_hist_Gt.get(),
+                    'hist_2DCH': self.root.plot_2DCH.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):
