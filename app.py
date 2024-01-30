@@ -490,16 +490,16 @@ class I_Ebias_GUI(FileSystemEventHandler):
         tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
-        self.V_upper = tk.DoubleVar(value=1.45)
-        self.length = tk.IntVar(value=1200)
+        self.mode = tk.StringVar(value='Ebias')
+        self.Ebias = tk.DoubleVar(value=0.05)
         self.I_unit = tk.DoubleVar(value=1e-6)
         self.V_unit = tk.DoubleVar(value=1)
         self.is_raw = tk.StringVar(value='raw')
         self.directory_recursive = tk.BooleanVar(value=False)
-        tk.Label(self.frame_config, text='V upper: ').grid(row=1, column=0)
-        tk.Entry(self.frame_config, textvariable=self.V_upper, justify='center').grid(row=1, column=1)
-        tk.Label(self.frame_config, text='Length: ').grid(row=1, column=2)
-        tk.Entry(self.frame_config, textvariable=self.length, justify='center').grid(row=1, column=3)
+        tk.Label(self.frame_config, text='Mode: ').grid(row=1, column=0)
+        tk.OptionMenu(self.frame_config, self.mode, *['Ebias', 'Ewk']).grid(row=1, column=1)
+        tk.Label(self.frame_config, text='Ebias: ').grid(row=1, column=2)
+        tk.Entry(self.frame_config, textvariable=self.Ebias, justify='center').grid(row=1, column=3)
         tk.Label(self.frame_config, text='Units (I, V): ').grid(row=1, column=4)
         frame_units = tk.Frame(self.frame_config)
         frame_units.grid(row=1, column=5)
@@ -507,90 +507,116 @@ class I_Ebias_GUI(FileSystemEventHandler):
         tk.Entry(frame_units, textvariable=self.V_unit, justify='center', width=10).pack(side='left')
         tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
-        # row 2
-        self.V_range = tk.DoubleVar(value=0.1)
-        self.I_limit = tk.DoubleVar(value=1e-5)
-        self.direction = tk.StringVar(value='both')
-        tk.Label(self.frame_config, text='I min@V< ').grid(row=2, column=0)
-        tk.Entry(self.frame_config, textvariable=self.V_range, justify='center').grid(row=2, column=1)
-        tk.Label(self.frame_config, text='I limit: ').grid(row=2, column=2)
-        tk.Entry(self.frame_config, textvariable=self.I_limit, justify='center').grid(row=2, column=3)
-        tk.Label(self.frame_config, text='Direction: ').grid(row=2, column=4)
-        tk.OptionMenu(self.frame_config, self.direction, *['both', '-→+', '+→-']).grid(row=2, column=5)
-        self.check_zeroing = tk.BooleanVar(value=True)
-        tk.Checkbutton(self.frame_config, variable=self.check_zeroing, text='Zeroing').grid(row=2, column=7, sticky='w')
-        # row 3
-        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
+        #row 2
         self.num_segment = tk.IntVar(value=4)  # number of segments in one cycle
+        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
         self.sampling_rate = tk.IntVar(value=40000)
-        tk.Label(self.frame_config, text='#Segments: ').grid(row=3, column=0)
-        tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=3, column=1)
-        tk.Label(self.frame_config, text='#Files: ').grid(row=3, column=2)
-        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=3, column=3)
-        tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=3, column=4)
-        tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=3, column=5)
+        tk.Label(self.frame_config, text='#Segments: ').grid(row=2, column=0)
+        tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=2, column=1)
+        tk.Label(self.frame_config, text='#Files: ').grid(row=2, column=2)
+        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=2, column=3)
+        tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=2, column=4)
+        tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=2, column=5)
+        # row 3
+        self.V_upper = tk.DoubleVar(value=1.45)
+        self.V_lower = tk.DoubleVar(value=-1.45)
+        self.length = tk.IntVar(value=1200)
+        self.offset0 = tk.IntVar(value=1200)
+        self.offset1 = tk.IntVar(value=1200)
+        tk.Label(self.frame_config, text='V upper/lower: ').grid(row=3, column=0)
+        frame_Vlimit = tk.Frame(self.frame_config)
+        frame_Vlimit.grid(row=3, column=1)
+        tk.Entry(frame_Vlimit, textvariable=self.V_upper, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_Vlimit, textvariable=self.V_lower, justify='center', width=10).pack(side='left')
+        tk.Label(self.frame_config, text='Length: ').grid(row=3, column=2)
+        tk.Entry(self.frame_config, textvariable=self.length, justify='center').grid(row=3, column=3)
+        tk.Label(self.frame_config, text='Offset: ').grid(row=3, column=4)
+        frame_offset = tk.Frame(self.frame_config)
+        frame_offset.grid(row=3, column=5)
+        tk.Entry(frame_offset, textvariable=self.offset0, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_offset, textvariable=self.offset1, justify='center', width=10).pack(side='left')
         # row 4
+        self.I_limit = tk.DoubleVar(value=1e-5)
+        self.is_noise_remove = tk.BooleanVar(value=True)
+        self.V0 = tk.DoubleVar(value=0)
+        self.dV = tk.DoubleVar(value=0.1)
+        self.is_zeroing = tk.BooleanVar(value=True)
+        self.zeroing_center = tk.DoubleVar(value=0)
+        self.direction = tk.StringVar(value='both')
+        tk.Label(self.frame_config, text='I limit: ').grid(row=4, column=0)
+        tk.Entry(self.frame_config, textvariable=self.I_limit, justify='center').grid(row=4, column=1)
+        tk.Checkbutton(self.frame_config, variable=self.is_noise_remove, text='I min@V=').grid(row=4, column=2)
+        frame_noise = tk.Frame(self.frame_config)
+        frame_noise.grid(row=4, column=3)
+        tk.Entry(frame_noise, textvariable=self.V0, justify='center', width=8).pack(side='left')
+        tk.Label(frame_noise, text='±').pack(side='left')
+        tk.Entry(frame_noise, textvariable=self.dV, justify='center', width=8).pack(side='left')
+        tk.Checkbutton(self.frame_config, variable=self.is_zeroing, text='Zeroing').grid(row=4, column=4, sticky='w')
+        tk.Entry(self.frame_config, textvariable=self.zeroing_center, justify='center').grid(row=4, column=5)
+        tk.Label(self.frame_config, text='Direction: ').grid(row=4, column=6)
+        tk.OptionMenu(self.frame_config, self.direction, *['both', '-→+', '+→-']).grid(row=4, column=7)
+        # row 5
         self.V_min = tk.DoubleVar(value=-1.5)
         self.V_max = tk.DoubleVar(value=1.5)
         self.V_bins = tk.IntVar(value=300)
         self.V_scale = tk.StringVar(value='linear')
-        tk.Label(self.frame_config, text='V min: ').grid(row=4, column=0)
-        tk.Entry(self.frame_config, textvariable=self.V_min, justify='center').grid(row=4, column=1)
-        tk.Label(self.frame_config, text='V max: ').grid(row=4, column=2)
-        tk.Entry(self.frame_config, textvariable=self.V_max, justify='center').grid(row=4, column=3)
-        tk.Label(self.frame_config, text='V #bins: ').grid(row=4, column=4)
-        tk.Entry(self.frame_config, textvariable=self.V_bins, justify='center').grid(row=4, column=5)
-        tk.Label(self.frame_config, text='V scale: ').grid(row=4, column=6)
-        tk.OptionMenu(self.frame_config, self.V_scale, *['log', 'linear']).grid(row=4, column=7)
-        # row 5
+        tk.Label(self.frame_config, text='V min: ').grid(row=5, column=0)
+        tk.Entry(self.frame_config, textvariable=self.V_min, justify='center').grid(row=5, column=1)
+        tk.Label(self.frame_config, text='V max: ').grid(row=5, column=2)
+        tk.Entry(self.frame_config, textvariable=self.V_max, justify='center').grid(row=5, column=3)
+        tk.Label(self.frame_config, text='V #bins: ').grid(row=5, column=4)
+        tk.Entry(self.frame_config, textvariable=self.V_bins, justify='center').grid(row=5, column=5)
+        tk.Label(self.frame_config, text='V scale: ').grid(row=5, column=6)
+        tk.OptionMenu(self.frame_config, self.V_scale, *['log', 'linear']).grid(row=5, column=7)
+        # row 6
         self.G_min = tk.DoubleVar(value=1e-5)
         self.G_max = tk.DoubleVar(value=1e-1)
         self.G_bins = tk.IntVar(value=400)
         self.G_scale = tk.StringVar(value='log')
-        tk.Label(self.frame_config, text='G min: ').grid(row=5, column=0)
-        tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=5, column=1)
-        tk.Label(self.frame_config, text='G max: ').grid(row=5, column=2)
-        tk.Entry(self.frame_config, textvariable=self.G_max, justify='center').grid(row=5, column=3)
-        tk.Label(self.frame_config, text='G #bins: ').grid(row=5, column=4)
-        tk.Entry(self.frame_config, textvariable=self.G_bins, justify='center').grid(row=5, column=5)
-        tk.Label(self.frame_config, text='G scale: ').grid(row=5, column=6)
-        tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=5, column=7)
-        # row 6
+        tk.Label(self.frame_config, text='G min: ').grid(row=6, column=0)
+        tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=6, column=1)
+        tk.Label(self.frame_config, text='G max: ').grid(row=6, column=2)
+        tk.Entry(self.frame_config, textvariable=self.G_max, justify='center').grid(row=6, column=3)
+        tk.Label(self.frame_config, text='G #bins: ').grid(row=6, column=4)
+        tk.Entry(self.frame_config, textvariable=self.G_bins, justify='center').grid(row=6, column=5)
+        tk.Label(self.frame_config, text='G scale: ').grid(row=6, column=6)
+        tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=6, column=7)
+        # row 7
         self.I_min = tk.DoubleVar(value=1e-11)
         self.I_max = tk.DoubleVar(value=1e-5)
         self.I_bins = tk.IntVar(value=600)
         self.I_scale = tk.StringVar(value='log')
-        tk.Label(self.frame_config, text='I min: ').grid(row=6, column=0)
-        tk.Entry(self.frame_config, textvariable=self.I_min, justify='center').grid(row=6, column=1)
-        tk.Label(self.frame_config, text='I max: ').grid(row=6, column=2)
-        tk.Entry(self.frame_config, textvariable=self.I_max, justify='center').grid(row=6, column=3)
-        tk.Label(self.frame_config, text='I #bins: ').grid(row=6, column=4)
-        tk.Entry(self.frame_config, textvariable=self.I_bins, justify='center').grid(row=6, column=5)
-        tk.Label(self.frame_config, text='I scale: ').grid(row=6, column=6)
-        tk.OptionMenu(self.frame_config, self.I_scale, *['log', 'linear']).grid(row=6, column=7)
-        # row 7
+        tk.Label(self.frame_config, text='I min: ').grid(row=7, column=0)
+        tk.Entry(self.frame_config, textvariable=self.I_min, justify='center').grid(row=7, column=1)
+        tk.Label(self.frame_config, text='I max: ').grid(row=7, column=2)
+        tk.Entry(self.frame_config, textvariable=self.I_max, justify='center').grid(row=7, column=3)
+        tk.Label(self.frame_config, text='I #bins: ').grid(row=7, column=4)
+        tk.Entry(self.frame_config, textvariable=self.I_bins, justify='center').grid(row=7, column=5)
+        tk.Label(self.frame_config, text='I scale: ').grid(row=7, column=6)
+        tk.OptionMenu(self.frame_config, self.I_scale, *['log', 'linear']).grid(row=7, column=7)
+        # row 8
         self.t_min = tk.DoubleVar(value=0)
         self.t_max = tk.DoubleVar(value=0.18)
         self.t_bins = tk.IntVar(value=1800)
         self.t_scale = tk.StringVar(value='linear')
-        tk.Label(self.frame_config, text='t min: ').grid(row=7, column=0)
-        tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=7, column=1)
-        tk.Label(self.frame_config, text='t max: ').grid(row=7, column=2)
-        tk.Entry(self.frame_config, textvariable=self.t_max, justify='center').grid(row=7, column=3)
-        tk.Label(self.frame_config, text='t #bins: ').grid(row=7, column=4)
-        tk.Entry(self.frame_config, textvariable=self.t_bins, justify='center').grid(row=7, column=5)
-        tk.Label(self.frame_config, text='t scale: ').grid(row=7, column=6)
-        tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=7, column=7)
-        # row 8
-        tk.Label(self.frame_config, text='Colorbar: ').grid(row=8, column=0)
+        tk.Label(self.frame_config, text='t min: ').grid(row=8, column=0)
+        tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=8, column=1)
+        tk.Label(self.frame_config, text='t max: ').grid(row=8, column=2)
+        tk.Entry(self.frame_config, textvariable=self.t_max, justify='center').grid(row=8, column=3)
+        tk.Label(self.frame_config, text='t #bins: ').grid(row=8, column=4)
+        tk.Entry(self.frame_config, textvariable=self.t_bins, justify='center').grid(row=8, column=5)
+        tk.Label(self.frame_config, text='t scale: ').grid(row=8, column=6)
+        tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=8, column=7)
+        # row 9
+        tk.Label(self.frame_config, text='Colorbar: ').grid(row=9, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
-        self.colorbar_conf.grid(row=8, column=1, columnspan=5, sticky='w')
+        self.colorbar_conf.grid(row=9, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
-        self.run_button.grid(row=8, column=6, padx=10)
+        self.run_button.grid(row=9, column=6, padx=10)
         self.is_run = False
-        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=8, column=7)
-        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=8, column=8)
+        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=9, column=7)
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=9, column=8)
         # is_plot frame
         self.frame_is_plot = tk.Frame(self.window)
         self.frame_is_plot.pack(side='top', anchor='w')
@@ -630,21 +656,22 @@ class I_Ebias_GUI(FileSystemEventHandler):
                 self.V = np.empty((0, self.length.get()))
                 #hist GV
                 if self.plot_hist_GV.get():
-                    self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get())
+                    self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
                     self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
                     self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
                 # hist IV
                 if self.plot_hist_IV.get():
-                    self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get())
+                    self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
                     self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
                     self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
                 # hist IVt
                 if self.plot_hist_IVt.get():
-                    self.hist_IVt = I_Ebias.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get())
+                    self.hist_IVt = I_Ebias.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                                                     'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
@@ -659,19 +686,27 @@ class I_Ebias_GUI(FileSystemEventHandler):
                 except Exception as E:
                     tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
                 self.run_config = {
-                    "height": self.V_upper.get(),
-                    "length_segment": self.length.get(),
+                    "mode": self.mode.get(),
+                    "Ebias": self.Ebias.get(),
                     "units": (self.I_unit.get(), self.V_unit.get()),
-                    "V_range": self.V_range.get(),
-                    "I_max": self.I_limit.get(),
+                    'recursive': self.directory_recursive.get(),
+                    'data_type': self.is_raw.get(),
+                    'num_segment': self.num_segment.get(),
+                    'num_files': self.num_files.get(),
+                    "V_upper": self.V_upper.get(),
+                    "V_lower": self.V_lower.get(),
+                    "length_segment": self.length.get(),
+                    "offset": (self.offset0.get(), self.offset1.get()),
+                    'is_noise_remove': self.is_noise_remove.get(),
+                    'V0': self.V0.get(),
+                    'dV': self.dV.get(),
+                    "I_limit": self.I_limit.get(),
+                    'is_zeroing': self.is_zeroing.get(),
+                    'zeroing_center': self.zeroing_center.get(),
+                    'direction': self.direction.get(),
                     'V_scale': self.V_scale.get(),
                     'G_scale': self.G_scale.get(),
                     'I_scale': self.I_scale.get(),
-                    'recursive': self.directory_recursive.get(),
-                    'num_files': self.num_files.get(),
-                    'num_segment': self.num_segment.get(),
-                    'zeroing': self.check_zeroing.get(),
-                    'data_type': self.is_raw.get(),
                     'hist_GV': self.plot_hist_GV.get(),
                     'hist_IV': self.plot_hist_IV.get(),
                     'hist_IVt': self.plot_hist_IVt.get()
@@ -712,12 +747,13 @@ class I_Ebias_GUI(FileSystemEventHandler):
             match self.run_config['data_type']:
                 case 'raw':
                     I_full, V_full = I_Ebias.extract_data(self.pending[-self.num_files.get():],
-                                                          height=self.run_config['height'],
+                                                          upper=self.run_config['V_upper'],
+                                                          lower=self.run_config['V_lower'],
                                                           length_segment=self.run_config['length_segment'],
                                                           num_segment=self.run_config['num_segment'],
-                                                          offset=[self.run_config['length_segment'], self.run_config['length_segment']],
+                                                          offset=self.run_config['offset'],
                                                           units=self.run_config['units'])
-                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), height=self.run_config['height'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
+                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
                 case 'cut':
                     extracted = I_Ebias.load_data(path, **self.run_config)
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
@@ -726,25 +762,38 @@ class I_Ebias_GUI(FileSystemEventHandler):
             return
         if I_full.shape[0] == 0: return
         else:
-            I, V = I_Ebias.noise_remove(I, V, **self.run_config)
-            if self.run_config['zeroing']: I, V = I_Ebias.zeroing(I, V)
+            if self.run_config['is_noise_remove']: I, V = I_Ebias.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'], I_limit=self.run_config['I_limit'])
+            else: I, V = I_Ebias.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+            if self.run_config['is_zeroing']: I, V = I_Ebias.zeroing(I, V, self.run_config['zeroing_center'])
             if I.size > 0:
-                match self.direction.get():
+                match self.run_config['direction']:
                     case '-→+':
                         I, V = I_Ebias.split_scan_direction(I, V)[0]
                     case '+→-':
                         I, V = I_Ebias.split_scan_direction(I, V)[1]
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
-                if self.run_config['hist_GV']:
-                    self.hist_GV.add_data(I, V)
-                    self.canvas_GV.draw()
-                if self.run_config['hist_IV']:
-                    self.hist_IV.add_data(I, V)
-                    self.canvas_IV.draw()
-                if self.run_config['hist_IVt']:
-                    self.hist_IVt.add_data(I_full, V_full)
-                    self.canvas_IVt.draw()
+                match self.run_config['mode']:
+                    case 'Ebias':
+                        if self.run_config['hist_GV']:
+                            self.hist_GV.add_data(I, V)
+                            self.canvas_GV.draw()
+                        if self.run_config['hist_IV']:
+                            self.hist_IV.add_data(I, V)
+                            self.canvas_IV.draw()
+                        if self.run_config['hist_IVt']:
+                            self.hist_IVt.add_data(I_full, V_full)
+                            self.canvas_IVt.draw()
+                    case 'Ewk':
+                        if self.run_config['hist_GV']:
+                            self.hist_GV.add_data(G=I_Ebias.conductance(I, self.run_config['Ebias']), V=V)
+                            self.canvas_GV.draw()
+                        if self.run_config['hist_IV']:
+                            self.hist_IV.add_data(I, V)
+                            self.canvas_IV.draw()
+                        if self.run_config['hist_IVt']:
+                            self.hist_IVt.add_data(I_full, V_full)
+                            self.canvas_IVt.draw()
                 self.status_traces.config(text=self.I.shape[0])
             self.pending.clear()
 
@@ -756,16 +805,24 @@ class I_Ebias_GUI(FileSystemEventHandler):
         settings = {
             'Data type': self.is_raw,
             'Recursive': self.directory_recursive,
+            'Mode': self.mode,
+            'Ebias': self.Ebias,
+            'I unit': self.I_unit,
+            'V unit': self.V_unit,
             '#Segments': self.num_segment,
             '#Files': self.num_files,
             'Sampling rate': self.sampling_rate,
             'V upper': self.V_upper,
+            'V lower': self.V_lower,
             'Length': self.length,
-            'I unit': self.I_unit,
-            'V unit': self.V_unit,
-            'I min@V<': self.V_range,
+            'Offset0': self.offset0,
+            'Offset1': self.offset1,
             'I limit': self.I_limit,
-            'Zeroing': self.check_zeroing,
+            'Noise remove': self.is_noise_remove,
+            'V0': self.V0,
+            'dV': self.dV,
+            'Zeroing': self.is_zeroing,
+            'Zeroing center': self.zeroing_center,
             'Direction': self.direction,
             'V min': self.V_min,
             'V max': self.V_max,
@@ -899,16 +956,24 @@ class I_Ebias_export_prompt:
                 data = {
                     'Data type': self.root.is_raw.get(),
                     'Recursive': self.root.directory_recursive.get(),
+                    'Mode': self.root.mode.get(),
+                    'Ebias': self.root.Ebias.get(),
+                    'I unit': self.root.I_unit.get(),
+                    'V unit': self.root.V_unit.get(),
                     '#Segments': self.root.num_segment.get(),
                     '#Files': self.root.num_files.get(),
                     'Sampling rate': self.root.sampling_rate.get(),
                     'V upper': self.root.V_upper.get(),
+                    'V lower': self.root.V_lower.get(),
                     'Length': self.root.length.get(),
-                    'I unit': self.root.I_unit.get(),
-                    'V unit': self.root.V_unit.get(),
-                    'I min@V<': self.root.V_range.get(),
+                    'Offset0': self.root.offset0.get(),
+                    'Offset1': self.root.offset1.get(),
                     'I limit': self.root.I_limit.get(),
-                    'Zeroing': self.root.check_zeroing.get(),
+                    'Noise remove': self.root.is_noise_remove.get(),
+                    'V0': self.root.V0.get(),
+                    'dV': self.root.dV.get(),
+                    'Zeroing': self.root.is_zeroing.get(),
+                    'Zeroing center': self.root.zeroing_center.get(),
                     'Direction': self.root.direction.get(),
                     'V min': self.root.V_min.get(),
                     'V max': self.root.V_max.get(),
