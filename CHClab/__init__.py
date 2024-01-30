@@ -1,4 +1,4 @@
-from . import STM_bj, I_Ebias
+from . import IVscan, STM_bj
 
 
 def _mpl_setup():

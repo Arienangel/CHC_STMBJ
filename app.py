@@ -19,7 +19,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from CHClab import STM_bj, I_Ebias
+from CHClab import IVscan, STM_bj
 
 
 class Main:
@@ -32,7 +32,7 @@ class Main:
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
-        tk.OptionMenu(frame, tk.StringVar(value='Select'), *['STM-bj', 'I-Ebias'], command=self.new_tab).pack(side='left')
+        tk.OptionMenu(frame, tk.StringVar(value='Select'), *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
         tk.Label(frame, text='Tab name: ').pack(side='left')
         self.tab_name = tk.StringVar()
         tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
@@ -49,20 +49,16 @@ class Main:
     def new_tab(self, experiment: str):
         name = self.tab_name.get() if self.tab_name.get() else experiment
         match experiment:
-            case 'STM-bj':
+            case 'STM bj':
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
                 tab.gui_object = STM_bj_GUI(tab)
-            case 'I-Ebias':
+            case 'IV scan':
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
-                tab.gui_object = I_Ebias_GUI(tab)
-            case 'I-Ewk':
-                tab = ttk.Frame(self.tabcontrol)
-                self.tabcontrol.add(tab, text=name)
-                self.tabcontrol.select(tab)
+                tab.gui_object = IVscan_GUI(tab)
 
     def rename_tab(self):
         try:
@@ -490,11 +486,11 @@ class STM_bj_export_prompt:
                         data = yaml.dump({'STM-bj': data}, f, yaml.SafeDumper)
 
 
-class I_Ebias_GUI(FileSystemEventHandler):
+class IVscan_GUI(FileSystemEventHandler):
 
     def __init__(self, iframe: tk.Frame) -> None:
         self.window = iframe
-        self.export_prompt = I_Ebias_export_prompt(self)
+        self.export_prompt = IVscan_export_prompt(self)
         # config frame
         self.frame_config = tk.Frame(self.window)
         self.frame_config.pack(side='top', anchor='w')
@@ -526,10 +522,10 @@ class I_Ebias_GUI(FileSystemEventHandler):
         self.num_segment = tk.IntVar(value=4)  # number of segments in one cycle
         self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
         self.sampling_rate = tk.IntVar(value=40000)
-        tk.Label(self.frame_config, text='#Segments: ').grid(row=2, column=0)
-        tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=2, column=1)
-        tk.Label(self.frame_config, text='#Files: ').grid(row=2, column=2)
-        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=2, column=3)
+        tk.Label(self.frame_config, text='#Files: ').grid(row=2, column=0)
+        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=2, column=1)
+        tk.Label(self.frame_config, text='#Segments: ').grid(row=2, column=2)
+        tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=2, column=3)
         tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=2, column=4)
         tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=2, column=5)
         # row 3
@@ -671,22 +667,22 @@ class I_Ebias_GUI(FileSystemEventHandler):
                 self.V = np.empty((0, self.length.get()))
                 #hist GV
                 if self.plot_hist_GV.get():
-                    self.hist_GV = I_Ebias.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
                     self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
                     self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
                 # hist IV
                 if self.plot_hist_IV.get():
-                    self.hist_IV = I_Ebias.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
                     self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
                     self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
                 # hist IVt
                 if self.plot_hist_IVt.get():
-                    self.hist_IVt = I_Ebias.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
-                                                     'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                                                    'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
@@ -761,31 +757,31 @@ class I_Ebias_GUI(FileSystemEventHandler):
         try:
             match self.run_config['data_type']:
                 case 'raw':
-                    I_full, V_full = I_Ebias.extract_data(self.pending[-self.num_files.get():],
-                                                          upper=self.run_config['V_upper'],
-                                                          lower=self.run_config['V_lower'],
-                                                          length_segment=self.run_config['length_segment'],
-                                                          num_segment=self.run_config['num_segment'],
-                                                          offset=self.run_config['offset'],
-                                                          units=self.run_config['units'])
-                    I, V = I_Ebias.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
+                    I_full, V_full = IVscan.extract_data(self.pending[-self.num_files.get():],
+                                                         upper=self.run_config['V_upper'],
+                                                         lower=self.run_config['V_lower'],
+                                                         length_segment=self.run_config['length_segment'],
+                                                         num_segment=self.run_config['num_segment'],
+                                                         offset=self.run_config['offset'],
+                                                         units=self.run_config['units'])
+                    I, V = IVscan.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
                 case 'cut':
-                    extracted = I_Ebias.load_data(path, **self.run_config)
+                    extracted = IVscan.load_data(path, **self.run_config)
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
         if I_full.shape[0] == 0: return
         else:
-            if self.run_config['is_noise_remove']: I, V = I_Ebias.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'], I_limit=self.run_config['I_limit'])
-            else: I, V = I_Ebias.noise_remove(I, V, I_limit=self.run_config['I_limit'])
-            if self.run_config['is_zeroing']: I, V = I_Ebias.zeroing(I, V, self.run_config['zeroing_center'])
+            if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'], I_limit=self.run_config['I_limit'])
+            else: I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+            if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
             if I.size > 0:
                 match self.run_config['direction']:
                     case '-→+':
-                        I, V = I_Ebias.split_scan_direction(I, V)[0]
+                        I, V = IVscan.split_scan_direction(I, V)[0]
                     case '+→-':
-                        I, V = I_Ebias.split_scan_direction(I, V)[1]
+                        I, V = IVscan.split_scan_direction(I, V)[1]
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
                 match self.run_config['mode']:
@@ -801,7 +797,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
                             self.canvas_IVt.draw()
                     case 'Ewk':
                         if self.run_config['hist_GV']:
-                            self.hist_GV.add_data(G=I_Ebias.conductance(I, self.run_config['Ebias']), V=V)
+                            self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
                             self.canvas_GV.draw()
                         if self.run_config['hist_IV']:
                             self.hist_IV.add_data(I, V)
@@ -816,7 +812,7 @@ class I_Ebias_GUI(FileSystemEventHandler):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
-            data = yaml.load(f.read(), yaml.SafeLoader)['I-Ebias']
+            data = yaml.load(f.read(), yaml.SafeLoader)['IVscan']
         settings = {
             'Data type': self.is_raw,
             'Recursive': self.directory_recursive,
@@ -874,9 +870,9 @@ class I_Ebias_GUI(FileSystemEventHandler):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
 
-class I_Ebias_export_prompt:
+class IVscan_export_prompt:
 
-    def __init__(self, root: I_Ebias_GUI, **kwargs) -> None:
+    def __init__(self, root: IVscan_GUI, **kwargs) -> None:
         self.window = tk.Toplevel()
         self.hide()
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
@@ -936,7 +932,7 @@ class I_Ebias_export_prompt:
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = self.root.V.ravel()
-                G = I_Ebias.conductance(self.root.I, self.root.V).ravel()
+                G = IVscan.conductance(self.root.I, self.root.V).ravel()
                 if self.check_raw_G.get(): A = np.vstack([A, G])
                 if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(G))])
                 if self.check_raw_I.get(): A = np.vstack([A, self.root.I.ravel()])
@@ -1013,13 +1009,13 @@ class I_Ebias_export_prompt:
                 if os.path.exists(path):
                     with open(path, mode='r', encoding='utf-8') as f:
                         old_data = yaml.load(f.read(), yaml.SafeLoader)
-                        if old_data: old_data.update({'I-Ebias': data})
-                        else: old_data = {'I-Ebias': data}
+                        if old_data: old_data.update({'IVscan': data})
+                        else: old_data = {'IVscan': data}
                     with open(path, mode='w', encoding='utf-8') as f:
                         data = yaml.dump(old_data, f, yaml.SafeDumper)
                 else:
                     with open(path, mode='w', encoding='utf-8') as f:
-                        data = yaml.dump({'I-Ebias': data}, f, yaml.SafeDumper)
+                        data = yaml.dump({'IVscan': data}, f, yaml.SafeDumper)
 
 
 if __name__ == '__main__':
