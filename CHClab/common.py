@@ -1,3 +1,4 @@
+import concurrent.futures
 import glob
 import os
 from typing import Literal, Union
@@ -103,8 +104,13 @@ def load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) 
     Returns:
         out (ndarray): Data read from the text files.
     """
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+        return executor.submit(_load_data, path, recursive, **kwargs).result()
+
+
+def _load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> np.ndarray:
     if isinstance(path, list):
-        return np.concatenate(list(map(lambda path: load_data(path, recursive), path)), axis=-1)
+        return np.concatenate(list(map(lambda path: _load_data(path, recursive), path)), axis=-1)
     elif path.endswith('.txt'):
         return np.loadtxt(path, unpack=True)
     elif path.endswith('.npy'):
@@ -129,8 +135,13 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
     Returns:
         out (DataFrame): Data read from the text files and unix time.
     """
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+        return executor.submit(_load_data_with_metadata, path, recursive, **kwargs).result()
+
+
+def _load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
     if isinstance(path, list):
-        return pd.concat(map(lambda path: load_data_with_metadata(path, recursive), path), axis=0)
+        return pd.concat(map(lambda path: _load_data_with_metadata(path, recursive), path), axis=0)
     elif path.endswith('.txt'):
         return pd.DataFrame([[np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['data', 'time'])
     elif os.path.isdir(path):
