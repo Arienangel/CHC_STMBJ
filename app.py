@@ -11,6 +11,7 @@ import tkinter.messagebox
 from tkinter import ttk
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yaml
@@ -68,6 +69,7 @@ class Main:
 
     def close_tab(self):
         self.tabcontrol.forget("current")
+        plt.close('all')
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
@@ -154,6 +156,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         # row 6
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
+        self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
@@ -185,6 +188,26 @@ class STM_bj_GUI(FileSystemEventHandler):
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting')
         self.status_last_file.pack(side='left')
+
+    def colorbar_apply(self, *args):
+
+        def apply():
+            try:
+                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                if colorbar_conf != "\n":
+                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                    if hasattr(self, 'hist_GS'):
+                        self.hist_GS.plot.set_cmap(cmap=cmap)
+                        self.canvas_GS.draw()
+                    if hasattr(self, 'hist_Gt'):
+                        self.hist_Gt.plot.set_cmap(cmap=cmap)
+                        self.canvas_Gt.draw()
+            except Exception as E:
+                return
+            finally:
+                self.colorbar_conf.edit_modified(False)
+
+        threading.Thread(target=apply).start()
 
     def run(self):
         match self.is_run:
@@ -229,14 +252,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
                     self.navtool_Gt = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
                     self.navtool_Gt.grid(row=1, column=15, columnspan=4, sticky='w')
-                try:
-                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                    if colorbar_conf != "\n":
-                        cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
-                        if self.plot_hist_GS.get(): self.hist_GS.plot.set_cmap(cmap=cmap)
-                        if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get(): self.hist_Gt.plot.set_cmap(cmap=cmap)
-                except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+                self.colorbar_apply()
                 self.run_config = {
                     "length": self.extract_length.get(),
                     "upper": self.upper.get(),
@@ -248,18 +264,14 @@ class STM_bj_GUI(FileSystemEventHandler):
                     'X_scale': self.X_scale.get(),
                     't_scale': self.t_scale.get(),
                     'recursive': self.directory_recursive.get(),
-                    'data_type': self.is_raw.get(),
-                    'hist_G': self.plot_hist_G.get(),
-                    'hist_GS': self.plot_hist_GS.get(),
-                    'hist_Gt': self.plot_hist_Gt.get(),
-                    'hist_2DCH': self.plot_2DCH.get()
+                    'data_type': self.is_raw.get()
                 }
                 self.status_traces.config(text=0)
                 self.time_init = None
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
                 self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
                 self.observer.start()
                 atexit.register(self.observer.stop)
                 self.run_button.config(text='Stop', bg='red')
@@ -291,7 +303,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         else:
             self.status_last_file.config(text="(Multiple)")
         try:
-            match self.is_raw.get():
+            match self.run_config['data_type']:
                 case 'raw':
                     df = STM_bj.load_data_with_metadata(path, **self.run_config)
                     df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
@@ -307,16 +319,16 @@ class STM_bj_GUI(FileSystemEventHandler):
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
-            if self.run_config['hist_G']:
+            if hasattr(self, 'hist_G'):
                 self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
                 self.canvas_G.draw()
-            if self.run_config['hist_GS']:
+            if hasattr(self, 'hist_GS'):
                 self.hist_GS.add_data(extracted)
                 self.canvas_GS.draw()
-            if (self.run_config['data_type'] == 'raw') & self.run_config['hist_Gt']:
+            if hasattr(self, 'hist_Gt'):
                 self.hist_Gt.add_data(time, extracted)
                 self.canvas_Gt.draw()
-            if self.run_config['hist_2DCH']:
+            if hasattr(self, 'hist_2DCH'):
                 self.hist_2DCH.add_data(extracted)
                 self.canvas_2DCH.draw()
             self.status_traces.config(text=self.G.shape[0])
@@ -497,7 +509,7 @@ class IVscan_GUI(FileSystemEventHandler):
         # row 0
         self.directory_path = tk.StringVar()
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
-        tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
+        tk.Entry(self.frame_config, textvariable=self.directory_path, width=85).grid(row=0, column=1, columnspan=5)
         tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
@@ -534,7 +546,7 @@ class IVscan_GUI(FileSystemEventHandler):
         self.length = tk.IntVar(value=1200)
         self.offset0 = tk.IntVar(value=1200)
         self.offset1 = tk.IntVar(value=1200)
-        tk.Label(self.frame_config, text='V upper/lower: ').grid(row=3, column=0)
+        tk.Label(self.frame_config, text='V upper/\nlower: ').grid(row=3, column=0)
         frame_Vlimit = tk.Frame(self.frame_config)
         frame_Vlimit.grid(row=3, column=1)
         tk.Entry(frame_Vlimit, textvariable=self.V_upper, justify='center', width=10).pack(side='left')
@@ -621,6 +633,7 @@ class IVscan_GUI(FileSystemEventHandler):
         # row 9
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=9, column=0)
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
+        self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=9, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
@@ -650,6 +663,29 @@ class IVscan_GUI(FileSystemEventHandler):
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting')
         self.status_last_file.pack(side='left')
+
+    def colorbar_apply(self, *args):
+
+        def apply():
+            try:
+                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+                if colorbar_conf != "\n":
+                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                    if hasattr(self, 'hist_GV'):
+                        self.hist_GV.plot.set_cmap(cmap=cmap)
+                        self.canvas_GV.draw()
+                    if hasattr(self, 'hist_IV'):
+                        self.hist_IV.plot.set_cmap(cmap=cmap)
+                        self.canvas_IV.draw()
+                    if hasattr(self, 'hist_IVt'):
+                        self.hist_IVt.plot.set_cmap(cmap=cmap)
+                        self.canvas_IVt.draw()
+            except Exception as E:
+                return
+            finally:
+                self.colorbar_conf.edit_modified(False)
+
+        threading.Thread(target=apply).start()
 
     def run(self):
         match self.is_run:
@@ -687,15 +723,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
                     self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
-                try:
-                    colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                    if colorbar_conf != "\n":
-                        cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
-                        if self.plot_hist_GV.get(): self.hist_GV.plot.set_cmap(cmap=cmap)
-                        if self.plot_hist_IV.get(): self.hist_IV.plot.set_cmap(cmap=cmap)
-                        if self.plot_hist_IVt.get(): self.hist_IVt.plot.set_cmap(cmap=cmap)
-                except Exception as E:
-                    tkinter.messagebox.showwarning('Warning', 'Invalid colorbar setting')
+                self.colorbar_apply()
                 self.run_config = {
                     "mode": self.mode.get(),
                     "Ebias": self.Ebias.get(),
@@ -717,17 +745,14 @@ class IVscan_GUI(FileSystemEventHandler):
                     'direction': self.direction.get(),
                     'V_scale': self.V_scale.get(),
                     'G_scale': self.G_scale.get(),
-                    'I_scale': self.I_scale.get(),
-                    'hist_GV': self.plot_hist_GV.get(),
-                    'hist_IV': self.plot_hist_IV.get(),
-                    'hist_IVt': self.plot_hist_IVt.get()
+                    'I_scale': self.I_scale.get()
                 }
                 self.pending = list()
                 self.status_traces.config(text=0)
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
                 self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.directory_recursive.get())
+                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
                 self.observer.start()
                 atexit.register(self.observer.stop)
                 self.run_button.config(text='Stop', bg='red')
@@ -757,7 +782,7 @@ class IVscan_GUI(FileSystemEventHandler):
         try:
             match self.run_config['data_type']:
                 case 'raw':
-                    I_full, V_full = IVscan.extract_data(self.pending[-self.num_files.get():],
+                    I_full, V_full = IVscan.extract_data(self.pending[-self.run_config['num_files']:],
                                                          upper=self.run_config['V_upper'],
                                                          lower=self.run_config['V_lower'],
                                                          length_segment=self.run_config['length_segment'],
@@ -786,23 +811,23 @@ class IVscan_GUI(FileSystemEventHandler):
                 self.V = np.vstack([self.V, V])
                 match self.run_config['mode']:
                     case 'Ebias':
-                        if self.run_config['hist_GV']:
+                        if hasattr(self, 'hist_GV'):
                             self.hist_GV.add_data(I, V)
                             self.canvas_GV.draw()
-                        if self.run_config['hist_IV']:
+                        if hasattr(self, 'hist_IV'):
                             self.hist_IV.add_data(I, V)
                             self.canvas_IV.draw()
-                        if self.run_config['hist_IVt']:
+                        if hasattr(self, 'hist_IVt'):
                             self.hist_IVt.add_data(I_full, V_full)
                             self.canvas_IVt.draw()
                     case 'Ewk':
-                        if self.run_config['hist_GV']:
+                        if hasattr(self, 'hist_GV'):
                             self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
                             self.canvas_GV.draw()
-                        if self.run_config['hist_IV']:
+                        if hasattr(self, 'hist_IV'):
                             self.hist_IV.add_data(I, V)
                             self.canvas_IV.draw()
-                        if self.run_config['hist_IVt']:
+                        if hasattr(self, 'hist_IVt'):
                             self.hist_IVt.add_data(I_full, V_full)
                             self.canvas_IVt.draw()
                 self.status_traces.config(text=self.I.shape[0])
