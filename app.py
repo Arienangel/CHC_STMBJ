@@ -284,11 +284,11 @@ class STM_bj_GUI(FileSystemEventHandler):
     def on_created(self, event):
         while True:
             if self.time_init is not None: break
-            else: time.sleep(0.5)
+            else: time.sleep(0.1)
         if isinstance(event, FileCreatedEvent):
             if (event.src_path.endswith('.txt')):
                 try:
-                    if os.path.getsize(event.src_path) == 0: time.sleep(0.5)
+                    if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
                     self.add_data(event.src_path)
                 except Exception as E:
                     if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')

@@ -104,17 +104,18 @@ def load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) 
     Returns:
         out (ndarray): Data read from the text files.
     """
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-        return executor.submit(_load_data, path, recursive, **kwargs).result()
+    if path.endswith('.txt'):
+        return np.loadtxt(path, unpack=True)
+    elif path.endswith('.npy'):
+        return np.load(path)
+    else: 
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            return executor.submit(_load_data, path, recursive, **kwargs).result()
 
 
 def _load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> np.ndarray:
     if isinstance(path, list):
-        return np.concatenate(list(map(lambda path: _load_data(path, recursive), path)), axis=-1)
-    elif path.endswith('.txt'):
-        return np.loadtxt(path, unpack=True)
-    elif path.endswith('.npy'):
-        return np.load(path)
+        return np.concatenate(list(map(lambda path: load_data(path, recursive), path)), axis=-1)
     elif os.path.isdir(path):
         files = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
         return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
@@ -122,7 +123,6 @@ def _load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs)
         with ZipFile(path) as zf:
             files = list(map(zf.read, filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())))
             return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
-
 
 def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
     """
@@ -135,15 +135,16 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
     Returns:
         out (DataFrame): Data read from the text files and unix time.
     """
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-        return executor.submit(_load_data_with_metadata, path, recursive, **kwargs).result()
+    if path.endswith('.txt'):
+        return pd.DataFrame([[np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['data', 'time'])
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            return executor.submit(_load_data_with_metadata, path, recursive, **kwargs).result()
 
 
 def _load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
     if isinstance(path, list):
-        return pd.concat(map(lambda path: _load_data_with_metadata(path, recursive), path), axis=0)
-    elif path.endswith('.txt'):
-        return pd.DataFrame([[np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['data', 'time'])
+        return pd.concat(map(lambda path: load_data_with_metadata(path, recursive), path), axis=0)
     elif os.path.isdir(path):
         df = pd.DataFrame()
         df['files'] = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
