@@ -76,6 +76,11 @@ class Main:
         self.window.update()
 
 
+def _set_directory(var: tk.StringVar, value: str):
+    if value == '""' or value == '': return
+    else: var.set(value)
+
+
 class STM_bj_GUI(FileSystemEventHandler):
 
     def __init__(self, root: tk.Frame) -> None:
@@ -88,8 +93,8 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.directory_path = tk.StringVar()
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
-        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
-        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.extract_length = tk.IntVar(value=2000)
         self.upper = tk.DoubleVar(value=3.2)
@@ -496,6 +501,7 @@ class STM_bj_export_prompt:
                 else:
                     with open(path, mode='w', encoding='utf-8') as f:
                         data = yaml.dump({'STM-bj': data}, f, yaml.SafeDumper)
+        self.hide()
 
 
 class IVscan_GUI(FileSystemEventHandler):
@@ -510,8 +516,8 @@ class IVscan_GUI(FileSystemEventHandler):
         self.directory_path = tk.StringVar()
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=85).grid(row=0, column=1, columnspan=5)
-        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: self.directory_path.set(json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
-        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: self.directory_path.set(tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.mode = tk.StringVar(value='Ebias')
         self.Ebias = tk.DoubleVar(value=0.05)
@@ -532,10 +538,10 @@ class IVscan_GUI(FileSystemEventHandler):
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
         #row 2
         self.num_segment = tk.IntVar(value=4)  # number of segments in one cycle
-        self.num_files = tk.IntVar(value=10)  # maximum number of files to finish one cycle
+        self.points_per_file = tk.IntVar(value=1000)
         self.sampling_rate = tk.IntVar(value=40000)
-        tk.Label(self.frame_config, text='#Files: ').grid(row=2, column=0)
-        tk.Entry(self.frame_config, textvariable=self.num_files, justify='center').grid(row=2, column=1)
+        tk.Label(self.frame_config, text='Points/File: ').grid(row=2, column=0)
+        tk.Entry(self.frame_config, textvariable=self.points_per_file, justify='center').grid(row=2, column=1)
         tk.Label(self.frame_config, text='#Segments: ').grid(row=2, column=2)
         tk.Entry(self.frame_config, textvariable=self.num_segment, justify='center').grid(row=2, column=3)
         tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=2, column=4)
@@ -657,12 +663,15 @@ class IVscan_GUI(FileSystemEventHandler):
         # status frame
         self.frame_status = tk.Frame(self.window)
         self.frame_status.pack(side='bottom', anchor='w')
-        tk.Label(self.frame_status, text='#Segments: ').pack(side='left')
+        tk.Label(self.frame_status, text='#Cycles: ').pack(side='left', anchor='w')
+        self.status_cycles = tk.Label(self.frame_status, text=0)
+        self.status_cycles.pack(side='left', anchor='w')
+        tk.Label(self.frame_status, text='#Segments: ', padx=20).pack(side='left', anchor='w')
         self.status_traces = tk.Label(self.frame_status, text=0)
-        self.status_traces.pack(side='left')
+        self.status_traces.pack(side='left', anchor='w')
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
-        self.status_last_file = tk.Label(self.frame_status, text='Waiting')
-        self.status_last_file.pack(side='left')
+        self.status_last_file = tk.Label(self.frame_status, text='Waiting', anchor='w')
+        self.status_last_file.pack(side='left', anchor='w')
 
     def colorbar_apply(self, *args):
 
@@ -701,6 +710,9 @@ class IVscan_GUI(FileSystemEventHandler):
                     item.destroy()
                 self.I = np.empty((0, self.length.get()))
                 self.V = np.empty((0, self.length.get()))
+                full_length = self.num_segment.get() * self.length.get() + self.offset0.get() + self.offset1.get()
+                self.I_full = np.empty((0, full_length))
+                self.V_full = np.empty((0, full_length))
                 #hist GV
                 if self.plot_hist_GV.get():
                     self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
@@ -731,7 +743,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     'recursive': self.directory_recursive.get(),
                     'data_type': self.is_raw.get(),
                     'num_segment': self.num_segment.get(),
-                    'num_files': self.num_files.get(),
+                    'num_files': full_length // self.points_per_file.get() + 1,
                     "V_upper": self.V_upper.get(),
                     "V_lower": self.V_lower.get(),
                     "length_segment": self.length.get(),
@@ -747,7 +759,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     'G_scale': self.G_scale.get(),
                     'I_scale': self.I_scale.get()
                 }
-                self.pending = list()
+                if self.run_config['data_type'] == 'raw': self.pending = list()
                 self.status_traces.config(text=0)
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
@@ -776,30 +788,33 @@ class IVscan_GUI(FileSystemEventHandler):
             self.status_last_file.config(text=path)
             if os.path.isdir(path):
                 if not os.listdir(path): return  # empty directory
-        else:
-            self.status_last_file.config(text="(Multiple)")
-        self.pending.append(path)
+        elif isinstance(path, list):
+            self.status_last_file.config(text=f"{len(path)} files")
         try:
             match self.run_config['data_type']:
                 case 'raw':
-                    I_full, V_full = IVscan.extract_data(self.pending[-self.run_config['num_files']:],
-                                                         upper=self.run_config['V_upper'],
-                                                         lower=self.run_config['V_lower'],
-                                                         length_segment=self.run_config['length_segment'],
-                                                         num_segment=self.run_config['num_segment'],
-                                                         offset=self.run_config['offset'],
-                                                         units=self.run_config['units'])
-                    I, V = IVscan.extract_data(np.stack([I_full.ravel(), V_full.ravel()]), upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1])
+                    self.pending.append(path)
+                    IV_full = IVscan.extract_data(self.pending[-self.run_config['num_files']:],
+                                                  upper=self.run_config['V_upper'],
+                                                  lower=self.run_config['V_lower'],
+                                                  length_segment=self.run_config['length_segment'],
+                                                  num_segment=self.run_config['num_segment'],
+                                                  offset=self.run_config['offset'],
+                                                  units=self.run_config['units'])
+                    if IV_full.size == 0: return
+                    else:
+                        I_full, V_full = IV_full
+                        I, V = np.concatenate(list(map(lambda A: IVscan.extract_data(A, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1]), np.swapaxes(IV_full, 0, 1))), axis=1)
+                        self.pending.clear()
                 case 'cut':
                     extracted = IVscan.load_data(path, **self.run_config)
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
             return
-        if I_full.shape[0] == 0: return
         else:
-            if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'], I_limit=self.run_config['I_limit'])
-            else: I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+            I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+            if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
             if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
             if I.size > 0:
                 match self.run_config['direction']:
@@ -809,6 +824,8 @@ class IVscan_GUI(FileSystemEventHandler):
                         I, V = IVscan.split_scan_direction(I, V)[1]
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+                self.I_full = np.vstack([self.I_full, I_full])
+                self.V_full = np.vstack([self.V_full, V_full])
                 match self.run_config['mode']:
                     case 'Ebias':
                         if hasattr(self, 'hist_GV'):
@@ -830,8 +847,8 @@ class IVscan_GUI(FileSystemEventHandler):
                         if hasattr(self, 'hist_IVt'):
                             self.hist_IVt.add_data(I_full, V_full)
                             self.canvas_IVt.draw()
+                self.status_cycles.config(text=self.I_full.shape[0])
                 self.status_traces.config(text=self.I.shape[0])
-            self.pending.clear()
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
@@ -846,7 +863,7 @@ class IVscan_GUI(FileSystemEventHandler):
             'I unit': self.I_unit,
             'V unit': self.V_unit,
             '#Segments': self.num_segment,
-            '#Files': self.num_files,
+            'points_per_file': self.points_per_file,
             'Sampling rate': self.sampling_rate,
             'V upper': self.V_upper,
             'V lower': self.V_lower,
@@ -877,7 +894,8 @@ class IVscan_GUI(FileSystemEventHandler):
             't #bins': self.t_bins,
             't scale': self.t_scale,
             'hist_GV': self.plot_hist_GV,
-            'hist_IV': self.plot_hist_IV
+            'hist_IV': self.plot_hist_IV,
+            'hist_IVt': self.plot_hist_IVt
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -997,7 +1015,7 @@ class IVscan_export_prompt:
                     'I unit': self.root.I_unit.get(),
                     'V unit': self.root.V_unit.get(),
                     '#Segments': self.root.num_segment.get(),
-                    '#Files': self.root.num_files.get(),
+                    'points_per_file': self.root.points_per_file.get(),
                     'Sampling rate': self.root.sampling_rate.get(),
                     'V upper': self.root.V_upper.get(),
                     'V lower': self.root.V_lower.get(),
@@ -1029,6 +1047,7 @@ class IVscan_export_prompt:
                     't scale': self.root.t_scale.get(),
                     'hist_GV': self.root.plot_hist_GV.get(),
                     'hist_IV': self.root.plot_hist_IV.get(),
+                    'hist_IVt': self.root.plot_hist_IVt.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):
@@ -1041,6 +1060,7 @@ class IVscan_export_prompt:
                 else:
                     with open(path, mode='w', encoding='utf-8') as f:
                         data = yaml.dump({'IVscan': data}, f, yaml.SafeDumper)
+        self.hide()
 
 
 if __name__ == '__main__':

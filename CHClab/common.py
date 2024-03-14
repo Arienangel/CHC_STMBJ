@@ -9,6 +9,7 @@ import matplotlib.colors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.interpolate
 import scipy.optimize
 import scipy.signal
 from scipy.constants import physical_constants
@@ -39,20 +40,23 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
         return I / V / G0
 
 
-def gaussian(x: np.ndarray, a: float, u: float, s: float) -> np.ndarray:
+def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: float | np.ndarray) -> np.ndarray:
     """
     Gaussian distribution curve
 
     Args:
         x (ndarray): input value
-        a (float): peak height
-        u (float): average
-        s (float): standard derivative
+        a (float | np.ndarray): peak height
+        u (float | np.ndarray): average
+        s (float | np.ndarray): standard derivative
 
     Returns:
         x (ndarray): output value
     """
-    return a * np.exp(-((x - u) / s)**2 / 2)
+    if isinstance(a, np.ndarray):
+        return np.expand_dims(a, axis=1) * np.exp(-((x - np.expand_dims(u, axis=1)) / np.expand_dims(s, axis=1))**2 / 2)
+    else:
+        return a * np.exp(-((x - u) / s)**2 / 2)
 
 
 def multi_gaussian(x: np.ndarray, *args: float):
@@ -93,7 +97,7 @@ def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, pro
     return np.stack([scipy.optimize.curve_fit(gaussian, X[left[i]:right[i]], Y[left[i]:right[i]], bounds=(0, np.inf))[0] for i in range(left.size)]).T
 
 
-def load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> np.ndarray:
+def load_data(path: Union[str, list], recursive: bool = False, **kwargs) -> np.ndarray:
     """
     Load data from text files.
 
@@ -104,25 +108,33 @@ def load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) 
     Returns:
         out (ndarray): Data read from the text files.
     """
-    if path.endswith('.txt'):
-        return np.loadtxt(path, unpack=True)
-    elif path.endswith('.npy'):
-        return np.load(path)
-    else: 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            return executor.submit(_load_data, path, recursive, **kwargs).result()
-
-
-def _load_data(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> np.ndarray:
-    if isinstance(path, list):
+    if isinstance(path, str):
+        if path.endswith('.txt'):
+            return np.loadtxt(path, unpack=True)
+        elif path.endswith('.npy'):
+            return np.load(path)
+        elif path.endswith('zip'):
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
+        elif os.path.isdir(path):
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
+    elif isinstance(path, list):
         return np.concatenate(list(map(lambda path: load_data(path, recursive), path)), axis=-1)
-    elif os.path.isdir(path):
+
+
+def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> np.ndarray:
+    # use subprocess to save memory usage
+    if folder:
+        path = folder
         files = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
         return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
-    elif path.endswith('zip'):
+    elif zipfile:
+        path = zipfile
         with ZipFile(path) as zf:
             files = list(map(zf.read, filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())))
             return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
+
 
 def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
     """
@@ -133,31 +145,38 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
         recursive (bool, optional): read txt files in folder recursively
 
     Returns:
-        out (DataFrame): Data read from the text files and unix time.
+        out (DataFrame): File path, data read from the text files and unix time.
     """
-    if path.endswith('.txt'):
-        return pd.DataFrame([[np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['data', 'time'])
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            return executor.submit(_load_data_with_metadata, path, recursive, **kwargs).result()
-
-
-def _load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
-    if isinstance(path, list):
+    if isinstance(path, str):
+        if path.endswith('.txt'):
+            return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
+        elif path.endswith('zip'):
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
+        elif os.path.isdir(path):
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                return executor.submit(_load_data_with_metadata, folder=path, recursive=recursive, **kwargs).result()
+    elif isinstance(path, list):
         return pd.concat(map(lambda path: load_data_with_metadata(path, recursive), path), axis=0)
-    elif os.path.isdir(path):
+
+
+def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> pd.DataFrame:
+    # use subprocess to save memory usage
+    if folder:
+        path = folder
         df = pd.DataFrame()
-        df['files'] = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
-        df['data'] = df['files'].apply(lambda f: dt.rbind(dt.iread(f)).to_numpy().T.squeeze())
-        df['time'] = df['files'].apply(os.path.getmtime)
-        return df[['data', 'time']]
-    elif path.endswith('zip'):
+        df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
+        df['data'] = df['path'].apply(lambda f: dt.rbind(dt.iread(f)).to_numpy().T.squeeze())
+        df['time'] = df['path'].apply(os.path.getmtime)
+        return df[['path', 'data', 'time']]
+    elif zipfile:
+        path = zipfile
         df = pd.DataFrame()
         with ZipFile(path) as zf:
-            df['files'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
-            df['data'] = df['files'].apply(lambda f: dt.rbind(dt.iread(zf.read(f))).to_numpy().T.squeeze())
-            df['time'] = df['files'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
-        return df[['data', 'time']]
+            df['path'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
+            df['data'] = df['path'].apply(lambda f: dt.rbind(dt.iread(zf.read(f))).to_numpy().T.squeeze())
+            df['time'] = df['path'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
+        return df[['path', 'data', 'time']]
 
 
 class Hist1D:
@@ -178,7 +197,7 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: float, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
@@ -239,11 +258,11 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: float, num_y_bin: float, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
-        self.height, *_ = np.histogram2d([], [], (self.x_bins, self.y_bins))
+        self.height = np.histogram2d([], [], (self.x_bins, self.y_bins))[0]
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale

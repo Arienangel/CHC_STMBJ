@@ -1,8 +1,3 @@
-from typing import Literal, Union
-
-import numpy as np
-import scipy.signal
-
 from .common import *
 
 
@@ -24,11 +19,13 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
     I, V = raw_data * np.expand_dims(units, 1)
-    peaks = scipy.signal.find_peaks(np.abs(np.gradient(np.gradient(V))), distance=length_segment / 2)[0]
+    peaks = scipy.signal.find_peaks(np.abs(np.gradient(np.gradient(V))), distance=length_segment / 4)[0]
     start_seg = peaks[np.isin(peaks + length_segment, peaks)]
+    if start_seg.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     V_seg = np.stack([V[i:i + length_segment] for i in start_seg])
     rm_idx = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])
     start_seg = np.delete(start_seg, rm_idx)
+    if start_seg.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     end_seg = start_seg + length_segment
     if num_segment == 1:
         return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg], axis=1)
@@ -54,11 +51,11 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, 
     '''
     if dV:
         zero_point = np.diagonal(V[:, np.abs(I).argmin(axis=1)])
-        filter = np.abs(zero_point - V0) < dV
-        I, V = I[filter], V[filter]
+        f = np.abs(zero_point - V0) < dV
+        I, V = I[f], V[f]
     if I_limit:
-        filter = np.where(np.abs(I).max(axis=1) < I_limit, True, False)
-        I, V = I[filter], V[filter]
+        f = np.where(np.abs(I).max(axis=1) < I_limit, True, False)
+        I, V = I[f], V[f]
     return I, V
 
 
