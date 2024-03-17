@@ -1,4 +1,6 @@
 import atexit
+import copy
+import gc
 import json
 import multiprocessing
 import os
@@ -33,23 +35,24 @@ class Main:
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
-        tk.OptionMenu(frame, tk.StringVar(value='Select'), *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
-        tk.Label(frame, text='Tab name: ').pack(side='left')
-        self.tab_name = tk.StringVar()
-        tk.Entry(frame, textvariable=self.tab_name, width=10, justify='left').pack(side='left')
-        tk.Button(frame, text='Apply', command=self.rename_tab).pack(side='left', padx=2)
-        global debug
-        debug = tk.BooleanVar(value=False)
+        self.option = tk.StringVar(value='Select')
+        tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
         self.always_on_top = tk.BooleanVar(value=False)
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
-        tk.Checkbutton(frame, variable=debug, text="Debug").pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
-        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
+        self.window.bind("<Control-t>", lambda *args: self.new_tab(self.option.get()))
+        self.tabcontrol.bind("<Triple-1>", self.close_tab)
+        self.window.bind("<Control-w>", self.close_tab)
+        self.rename_text = tk.StringVar(self.tabcontrol)
+        self.rename_entry = tk.Entry(self.tabcontrol, textvariable=self.rename_text, bg='grey')
+        self.tabcontrol.bind("<Button-3>", self.tab_rename_start)
+        self.window.bind("<F2>", self.tab_rename_start)
+        self.rename_entry.bind("<Return>", self.tab_rename_stop)
+        self.rename_entry.bind("<Escape>", self.tab_rename_cancel)
 
-    def new_tab(self, experiment: str):
-        name = self.tab_name.get() if self.tab_name.get() else experiment
-        match experiment:
+    def new_tab(self, name: str):
+        match name:
             case 'STM bj':
                 tab = ttk.Frame(self.tabcontrol)
                 self.tabcontrol.add(tab, text=name)
@@ -61,15 +64,35 @@ class Main:
                 self.tabcontrol.select(tab)
                 tab.gui_object = IVscan_GUI(tab)
 
-    def rename_tab(self):
+    def tab_rename_start(self, *args):
         try:
-            self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.tab_name.get())
-        except Exception as E:
+            self.tabcontrol.index('current')
+        except:
             return
+        self.rename_entry.place(width=100, height=20, x=0, y=0, anchor="nw")
+        self.rename_text.set(self.tabcontrol.tab(self.tabcontrol.index('current'))['text'])
+        self.rename_entry.focus_set()
+        self.rename_entry.grab_set()
 
-    def close_tab(self):
-        self.tabcontrol.forget("current")
+    def tab_rename_stop(self, *args):
+        self.tabcontrol.tab(self.tabcontrol.index('current'), text=self.rename_entry.get())
+        self.rename_entry.place_forget()
+        self.rename_entry.grab_release()
+
+    def tab_rename_cancel(self, *args):
+        self.rename_entry.delete(0, "end")
+        self.rename_entry.place_forget()
+        self.rename_entry.grab_release()
+
+    def close_tab(self, *args):
+        tab = self.tabcontrol.nametowidget(self.tabcontrol.select())
+        gui = tab.gui_object
+        gui.export_prompt.window.destroy()
+        gui.window.destroy()
+        tab.destroy()
+        delattr(tab, 'gui_object')
         plt.close('all')
+        gc.collect()
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
@@ -226,6 +249,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                         return
                 for item in self.frame_figures.winfo_children():
                     item.destroy()
+                gc.collect()
                 self.G = np.empty((0, self.extract_length.get()))
                 # hist G
                 if self.plot_hist_G.get():
@@ -255,8 +279,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
                     self.canvas_2DCH = FigureCanvasTkAgg(self.hist_2DCH.fig, self.frame_figures)
                     self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
-                    self.navtool_Gt = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
-                    self.navtool_Gt.grid(row=1, column=15, columnspan=4, sticky='w')
+                    self.navtool_2DCH = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
+                    self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
                 self.colorbar_apply()
                 self.run_config = {
                     "length": self.extract_length.get(),
@@ -278,6 +302,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.observer = Observer()
                 self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
                 self.observer.start()
+                logger.info(f'Start observer: {path}')
                 atexit.register(self.observer.stop)
                 self.run_button.config(text='Stop', bg='red')
                 self.is_run = True
@@ -285,6 +310,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.run_button.config(text='Run', bg='lime')
                 self.is_run = False
                 threading.Thread(target=self.observer.stop).start()
+                logger.info(f'Stop observer: {path}')
+                gc.collect()
 
     def on_created(self, event):
         while True:
@@ -296,7 +323,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
                     self.add_data(event.src_path)
                 except Exception as E:
-                    if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
+                    logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -306,8 +333,9 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.time_init = 0
                     return
         else:
-            self.status_last_file.config(text="(Multiple)")
+            self.status_last_file.config(text=f"{len(path)} files")
         try:
+            logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
                 case 'raw':
                     df = STM_bj.load_data_with_metadata(path, **self.run_config)
@@ -320,7 +348,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     extracted = STM_bj.load_data(path, **self.run_config)
                     extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
-            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files\n' + type(E).__name__ + '\n' + str(E.args))
+            logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
@@ -708,6 +736,7 @@ class IVscan_GUI(FileSystemEventHandler):
                         return
                 for item in self.frame_figure.winfo_children():
                     item.destroy()
+                gc.collect()
                 self.I = np.empty((0, self.length.get()))
                 self.V = np.empty((0, self.length.get()))
                 full_length = self.num_segment.get() * self.length.get() + self.offset0.get() + self.offset1.get()
@@ -743,7 +772,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     'recursive': self.directory_recursive.get(),
                     'data_type': self.is_raw.get(),
                     'num_segment': self.num_segment.get(),
-                    'num_files': full_length // self.points_per_file.get() + 1,
+                    'num_files': full_length // self.points_per_file.get() + 2,
                     "V_upper": self.V_upper.get(),
                     "V_lower": self.V_lower.get(),
                     "length_segment": self.length.get(),
@@ -766,6 +795,7 @@ class IVscan_GUI(FileSystemEventHandler):
                 self.observer = Observer()
                 self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
                 self.observer.start()
+                logger.info(f'Start observer: {path}')
                 atexit.register(self.observer.stop)
                 self.run_button.config(text='Stop', bg='red')
                 self.is_run = True
@@ -773,6 +803,8 @@ class IVscan_GUI(FileSystemEventHandler):
                 self.run_button.config(text='Run', bg='lime')
                 self.is_run = False
                 threading.Thread(target=self.observer.stop).start()
+                logger.info(f'Stop observer')
+                gc.collect()
 
     def on_created(self, event):
         if isinstance(event, FileCreatedEvent):
@@ -781,7 +813,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
                     self.add_data(event.src_path)
                 except Exception as E:
-                    if debug.get(): tkinter.messagebox.showwarning('Warning', f'{type(E).__name__}: {E.args}')
+                    logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -791,18 +823,15 @@ class IVscan_GUI(FileSystemEventHandler):
         elif isinstance(path, list):
             self.status_last_file.config(text=f"{len(path)} files")
         try:
+            logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
                 case 'raw':
                     self.pending.append(path)
-                    IV_full = IVscan.extract_data(self.pending[-self.run_config['num_files']:],
-                                                  upper=self.run_config['V_upper'],
-                                                  lower=self.run_config['V_lower'],
-                                                  length_segment=self.run_config['length_segment'],
-                                                  num_segment=self.run_config['num_segment'],
-                                                  offset=self.run_config['offset'],
-                                                  units=self.run_config['units'])
+                    list_files = copy.copy(self.pending[-self.run_config['num_files']:])
+                    IV_full = IVscan.extract_data(list_files, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=self.run_config['num_segment'], offset=self.run_config['offset'], units=self.run_config['units'])
                     if IV_full.size == 0: return
                     else:
+                        logger.debug(f'{IV_full.shape[1]} Fullcycle detected in {list_files}')
                         I_full, V_full = IV_full
                         I, V = np.concatenate(list(map(lambda A: IVscan.extract_data(A, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1]), np.swapaxes(IV_full, 0, 1))), axis=1)
                         self.pending.clear()
@@ -810,7 +839,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     extracted = IVscan.load_data(path, **self.run_config)
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
-            if debug.get(): tkinter.messagebox.showerror('Error', 'Failed to extract files')
+            logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
             return
         else:
             I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
@@ -1064,7 +1093,18 @@ class IVscan_export_prompt:
 
 
 if __name__ == '__main__':
+    import argparse
+    import logging
+    parser = argparse.ArgumentParser(description='Run GUI')
+    parser.add_argument('--debug', action='store_true')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+    logger = logging.getLogger('App')
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG if parser.parse_args().debug else logging.WARNING)
     multiprocessing.freeze_support()  # PyInstaller
     matplotlib.use('TkAgg')
+    plt.ioff()
     GUI = Main()
     tk.mainloop()

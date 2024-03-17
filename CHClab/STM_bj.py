@@ -177,5 +177,6 @@ class Hist_Correlation(Hist2D):
             self.N = np.concatenate([self.N, N], axis=0)
         else:
             self.N = N
-        self.height = np.corrcoef(self.N, rowvar=False)
+        with np.errstate(divide='ignore',invalid='ignore'): 
+            self.height = np.corrcoef(self.N, rowvar=False)
         self.plot.set_array(self.height.T)

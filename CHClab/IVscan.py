@@ -31,7 +31,8 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
         return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg], axis=1)
     else:
         start_full = peaks[np.isin(peaks + length_segment * num_segment, peaks)]
-        is_full = np.where(np.isin(np.expand_dims(start_full, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0), end_seg), 1, 0).sum(axis=1) == num_segment
+        is_full = (np.where(np.isin(np.expand_dims(start_full, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0), end_seg), 1, 0).sum(axis=1) == num_segment) & (start_full + length_segment * num_segment + offset[1] < I.size) & (start_full - offset[0] >= 0)
+        if start_full[is_full].size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
         return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full[is_full]], axis=1)
 
 
