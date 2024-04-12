@@ -1093,6 +1093,7 @@ class IVscan_export_prompt:
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()  # PyInstaller
     import argparse
     import logging
     parser = argparse.ArgumentParser(description='Run GUI')
@@ -1103,7 +1104,6 @@ if __name__ == '__main__':
     logger = logging.getLogger('App')
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG if parser.parse_args().debug else logging.WARNING)
-    multiprocessing.freeze_support()  # PyInstaller
     matplotlib.use('TkAgg')
     plt.ioff()
     GUI = Main()
