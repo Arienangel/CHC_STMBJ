@@ -36,7 +36,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
         return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full[is_full]], axis=1)
 
 
-def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, I_limit: float = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, I_limit: float = None, **kwargs) -> tuple:
     '''
     Remove noise traces
 
@@ -60,7 +60,7 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, 
     return I, V
 
 
-def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple[np.ndarray, np.ndarray]:
+def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple:
     '''
     Set minimum current value at V=0
 
@@ -77,7 +77,7 @@ def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple[np.n
     return I, V - np.expand_dims(zero_point, axis=1) + V0
 
 
-def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple:
     '''
     Split E bias scanning direction
 
@@ -97,7 +97,7 @@ def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple[tuple[
 
 class Hist_GV(Hist2D):
 
-    def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-5, 1e-1), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
+    def __init__(self, xlim: tuple = (-1.5, 1.5), ylim: tuple = (1e-5, 1e-1), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
         self.ax.set_ylabel('Conductance ($G/G_0$)')
@@ -118,7 +118,7 @@ class Hist_GV(Hist2D):
 
 class Hist_IV(Hist2D):
 
-    def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-11, 1e-5), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
+    def __init__(self, xlim: tuple = (-1.5, 1.5), ylim: tuple = (1e-11, 1e-5), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
         self.ax.set_ylabel('Current (A)')
@@ -138,9 +138,9 @@ class Hist_IV(Hist2D):
 class Hist_IVt(Hist2D):
 
     def __init__(self,
-                 xlim: tuple[float, float] = (0, 0.2),
-                 y1lim: tuple[float, float] = (1e-11, 1e-5),
-                 y2lim: tuple[float, float] = (-1.5, 1.5),
+                 xlim: tuple = (0, 0.2),
+                 y1lim: tuple = (1e-11, 1e-5),
+                 y2lim: tuple = (-1.5, 1.5),
                  num_x_bin: float = 1000,
                  num_y1_bin: float = 300,
                  xscale: Literal['linear', 'log'] = 'linear',

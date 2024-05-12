@@ -40,7 +40,7 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
         return I / V / G0
 
 
-def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: float | np.ndarray) -> np.ndarray:
+def gaussian(x: np.ndarray, a, u, s) -> np.ndarray:
     """
     Gaussian distribution curve
 
@@ -127,7 +127,7 @@ def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False,
     # use subprocess to save memory usage
     if folder:
         path = folder
-        files = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
+        files = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
         return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
     elif zipfile:
         path = zipfile
@@ -165,7 +165,7 @@ def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive:
     if folder:
         path = folder
         df = pd.DataFrame()
-        df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
+        df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
         df['data'] = df['path'].apply(lambda f: dt.rbind(dt.iread(f)).to_numpy().T.squeeze())
         df['time'] = df['path'].apply(os.path.getmtime)
         return df[['path', 'data', 'time']]
@@ -197,7 +197,7 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple, num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
@@ -258,7 +258,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple, ylim: tuple, num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
