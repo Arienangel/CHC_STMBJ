@@ -260,6 +260,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
                     self.auto_normalize_G = tk.BooleanVar(value=True)
                     tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                    self.canvas_G.draw()
                 # hist GS
                 if self.plot_hist_GS.get():
                     self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
@@ -267,6 +268,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
                     self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+                    self.canvas_GS.draw()
                 # hist Gt
                 if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get():
                     self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
@@ -274,6 +276,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figures, pack_toolbar=False)
                     self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
+                    self.canvas_Gt.draw()
                 # hist 2DCH
                 if self.plot_2DCH.get():
                     self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
@@ -281,6 +284,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
                     self.navtool_2DCH = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
                     self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
+                    self.canvas_2DCH.draw()
                 self.colorbar_apply()
                 self.run_config = {
                     "length": self.extract_length.get(),
@@ -310,7 +314,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.run_button.config(text='Run', bg='lime')
                 self.is_run = False
                 threading.Thread(target=self.observer.stop).start()
-                logger.info(f'Stop observer: {path}')
+                logger.info(f'Stop observer')
                 gc.collect()
 
     def on_created(self, event):
@@ -749,6 +753,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
                     self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
+                    self.canvas_GV.draw()
                 # hist IV
                 if self.plot_hist_IV.get():
                     self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
@@ -756,6 +761,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
                     self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
+                    self.canvas_IV.draw()
                 # hist IVt
                 if self.plot_hist_IVt.get():
                     self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
@@ -764,6 +770,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
                     self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
+                    self.canvas_IVt.draw()
                 self.colorbar_apply()
                 self.run_config = {
                     "mode": self.mode.get(),
