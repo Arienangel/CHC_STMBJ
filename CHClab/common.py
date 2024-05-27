@@ -97,7 +97,7 @@ def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, pro
     return np.stack([scipy.optimize.curve_fit(gaussian, X[left[i]:right[i]], Y[left[i]:right[i]], bounds=(0, np.inf))[0] for i in range(left.size)]).T
 
 
-def load_data(path: Union[str, list], recursive: bool = False, **kwargs) -> np.ndarray:
+def load_data(path: Union[str, list], recursive: bool = False, max_workers=None, **kwargs) -> np.ndarray:
     """
     Load data from text files.
 
@@ -114,13 +114,13 @@ def load_data(path: Union[str, list], recursive: bool = False, **kwargs) -> np.n
         elif path.endswith('.npy'):
             return np.load(path)
         elif path.endswith('zip'):
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
         elif os.path.isdir(path):
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
-        return np.concatenate(list(map(lambda path: load_data(path, recursive), path)), axis=-1)
+        return np.concatenate(list(map(lambda path: load_data(path, recursive, max_workers, **kwargs), path)), axis=-1)
 
 
 def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> np.ndarray:
@@ -136,7 +136,7 @@ def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False,
             return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
 
 
-def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, **kwargs) -> pd.DataFrame:
+def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, max_workers=None, **kwargs) -> pd.DataFrame:
     """
     Load data and metadata from text files.
 
@@ -151,13 +151,13 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
         if path.endswith('.txt'):
             return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
         elif path.endswith('zip'):
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
         elif os.path.isdir(path):
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data_with_metadata, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
-        return pd.concat(map(lambda path: load_data_with_metadata(path, recursive), path), axis=0)
+        return pd.concat(map(lambda path: load_data_with_metadata(path, recursive, max_workers, **kwargs), path), axis=0)
 
 
 def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> pd.DataFrame:
@@ -301,3 +301,17 @@ class Hist2D:
         self.trace = 0
         self.height.fill(0)
         self.plot.set_array(self.height.T)
+
+    def set_cmap(self, cmap):
+        """
+        Args:
+            cmap (LinearSegmentedColormap | dict): 
+                {
+                    'red':   [[0, 1, 1], [0.05, 0, 0], [0.1, 0, 0], [0.15, 1, 1], [0.3, 1, 1], [1, 1, 1]],
+                    'green': [[0, 1, 1], [0.05, 0, 0], [0.1, 1, 1], [0.15, 1, 1], [0.3, 0, 0], [1, 0, 0]],
+                    'blue':  [[0, 1, 1], [0.05, 1, 1], [0.1, 0, 0], [0.15, 0, 0], [0.3, 0, 0], [1, 1, 1]]
+                }
+        """
+        if isinstance(cmap, dict):
+            cmap = matplotlib.colors.LinearSegmentedColormap('Cmap', segmentdata=cmap, N=256)
+        self.plot.set_cmap(cmap)

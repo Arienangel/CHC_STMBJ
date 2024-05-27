@@ -37,10 +37,14 @@ class Main:
         tk.Label(frame, text='Experiment: ').pack(side='left')
         self.option = tk.StringVar(value='Select')
         tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
+        self.CPU_threads = tk.IntVar(value=1)
         self.always_on_top = tk.BooleanVar(value=False)
+        tk.Label(frame, text='CPU threads: ').pack(side='left')
+        tk.Entry(frame, textvariable=self.CPU_threads, width=10, justify='center').pack(side='left')
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
+        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
         self.window.bind("<Control-t>", lambda *args: self.new_tab(self.option.get()))
         self.tabcontrol.bind("<Triple-1>", self.close_tab)
         self.window.bind("<Control-w>", self.close_tab)
@@ -222,12 +226,12 @@ class STM_bj_GUI(FileSystemEventHandler):
             try:
                 colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                 if colorbar_conf != "\n":
-                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                    cmap = json.loads(colorbar_conf)
                     if hasattr(self, 'hist_GS'):
-                        self.hist_GS.plot.set_cmap(cmap=cmap)
+                        self.hist_GS.set_cmap(cmap=cmap)
                         self.canvas_GS.draw()
                     if hasattr(self, 'hist_Gt'):
-                        self.hist_Gt.plot.set_cmap(cmap=cmap)
+                        self.hist_Gt.set_cmap(cmap=cmap)
                         self.canvas_Gt.draw()
             except Exception as E:
                 return
@@ -267,7 +271,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
                 self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
                 self.canvas_GS.draw()
-            # hist Gt 
+            # hist Gt
             if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get():
                 self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
                 self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figures)
@@ -339,14 +343,14 @@ class STM_bj_GUI(FileSystemEventHandler):
         try:
             logger.debug(f'Add data: {path}')
             if self.run_config['data_type'] == 'raw':
-                df = STM_bj.load_data_with_metadata(path, **self.run_config)
+                df = STM_bj.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                 df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
                 extracted = np.concatenate(df['extracted'].values)
                 time = np.repeat(df['time'].values, df['extracted'].apply(lambda g: g.shape[0]).values)
                 if not self.time_init: self.time_init = time.min()
                 time = time - self.time_init
             elif self.run_config['data_type'] == 'cut':
-                extracted = STM_bj.load_data(path, **self.run_config)
+                extracted = STM_bj.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                 extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
@@ -707,15 +711,15 @@ class IVscan_GUI(FileSystemEventHandler):
             try:
                 colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                 if colorbar_conf != "\n":
-                    cmap = LinearSegmentedColormap('Cmap', segmentdata=json.loads(colorbar_conf), N=256)
+                    cmap = json.loads(colorbar_conf)
                     if hasattr(self, 'hist_GV'):
-                        self.hist_GV.plot.set_cmap(cmap=cmap)
+                        self.hist_GV.set_cmap(cmap=cmap)
                         self.canvas_GV.draw()
                     if hasattr(self, 'hist_IV'):
-                        self.hist_IV.plot.set_cmap(cmap=cmap)
+                        self.hist_IV.set_cmap(cmap=cmap)
                         self.canvas_IV.draw()
                     if hasattr(self, 'hist_IVt'):
-                        self.hist_IVt.plot.set_cmap(cmap=cmap)
+                        self.hist_IVt.set_cmap(cmap=cmap)
                         self.canvas_IVt.draw()
             except Exception as E:
                 return
@@ -829,7 +833,14 @@ class IVscan_GUI(FileSystemEventHandler):
             if self.run_config['data_type'] == 'raw':
                 self.pending.append(path)
                 list_files = copy.copy(self.pending[-self.run_config['num_files']:])
-                IV_full = IVscan.extract_data(list_files, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=self.run_config['num_segment'], offset=self.run_config['offset'], units=self.run_config['units'])
+                IV_full = IVscan.extract_data(list_files,
+                                              upper=self.run_config['V_upper'],
+                                              lower=self.run_config['V_lower'],
+                                              length_segment=self.run_config['length_segment'],
+                                              num_segment=self.run_config['num_segment'],
+                                              offset=self.run_config['offset'],
+                                              units=self.run_config['units'],
+                                              max_workers=GUI.CPU_threads.get())
                 if IV_full.size == 0: return
                 else:
                     logger.debug(f'{IV_full.shape[1]} Fullcycle detected in {list_files}')
@@ -837,7 +848,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     I, V = np.concatenate(list(map(lambda A: IVscan.extract_data(A, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1]), np.swapaxes(IV_full, 0, 1))), axis=1)
                     self.pending.clear()
             elif self.run_config['data_type'] == 'cut':
-                extracted = IVscan.load_data(path, **self.run_config)
+                extracted = IVscan.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                 V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
