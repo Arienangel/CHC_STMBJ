@@ -80,24 +80,6 @@ class Hist_G(Hist1D):
         for i, j in zip(*peak_position):
             self.ax.annotate(f'{i:1.2E}', xy=(i, j+0.02), ha='center', fontsize=8)'''
 
-    def get_peak(self, *, window_length=25, polyorder=5, prominence=0.05):
-        """
-        Get peak position and width by fitting Gaussian function
-
-        Args:
-            window_length (int)
-            polyorder (int)
-            prominence (float)
-
-        Returns:
-            height (ndarray): peak height
-            avg (ndarray): average
-            stdev (ndarray): standard derivative
-        """
-        X = np.sqrt(self.x_bins[:-1] * self.x_bins[1:])
-        Y = self.height
-        return get_peak(X, Y, window_length=window_length, polyorder=polyorder, prominence=prominence)
-
 
 class Hist_GS(Hist2D):
 
@@ -177,6 +159,6 @@ class Hist_Correlation(Hist2D):
             self.N = np.concatenate([self.N, N], axis=0)
         else:
             self.N = N
-        with np.errstate(divide='ignore',invalid='ignore'): 
+        with np.errstate(divide='ignore', invalid='ignore'):
             self.height = np.corrcoef(self.N, rowvar=False)
         self.plot.set_array(self.height.T)

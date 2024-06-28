@@ -1,7 +1,7 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lower: float = -1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], **kwargs):
+def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lower: float = -1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], mode: Literal['gradient', 'height'] = 'gradient', **kwargs):
     '''
     Extract traces from raw_data
 
@@ -12,6 +12,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
         num_segment (int, oprional):numbber of segments
         offset (list, optional): length from first point to first peak and last point to last peak
         units (list, optional): default: (μA, V)
+        mode (str, optional): method used to find peaks
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
@@ -19,7 +20,11 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
     I, V = raw_data * np.expand_dims(units, 1)
-    peaks = scipy.signal.find_peaks(np.abs(np.gradient(np.gradient(V))), distance=length_segment / 4)[0]
+    match mode:
+        case 'gradient':
+            peaks = scipy.signal.find_peaks(np.abs(np.gradient(np.gradient(V))), distance=length_segment / 4)[0]
+        case 'height':
+            peaks = np.concatenate([scipy.signal.find_peaks(V, height=upper, distance=length_segment / 4)[0], scipy.signal.find_peaks(-V, height=-lower, distance=length_segment / 4)[0]])
     start_seg = peaks[np.isin(peaks + length_segment, peaks)]
     if start_seg.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     V_seg = np.stack([V[i:i + length_segment] for i in start_seg])

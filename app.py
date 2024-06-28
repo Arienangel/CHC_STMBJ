@@ -262,8 +262,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
                     self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                    self.auto_normalize_G = tk.BooleanVar(value=True)
-                    tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                    self.autoscale_G = tk.BooleanVar(value=True)
+                    tk.Checkbutton(self.frame_figures, variable=self.autoscale_G, text="Autoscale").grid(row=1, column=4, sticky='w')
                     self.canvas_G.draw()
                 # hist GS
                 if self.plot_hist_GS.get():
@@ -361,7 +361,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
             if hasattr(self, 'hist_G'):
-                self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
+                self.hist_G.add_data(extracted, set_ylim=self.autoscale_G.get())
                 self.canvas_G.draw()
             if hasattr(self, 'hist_GS'):
                 self.hist_GS.add_data(extracted)
@@ -800,6 +800,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     'I_scale': self.I_scale.get()
                 }
                 if self.run_config['data_type'] == 'raw': self.pending = list()
+                self.status_cycles.config(text=0)
                 self.status_traces.config(text=0)
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
