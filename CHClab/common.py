@@ -12,6 +12,7 @@ import pandas as pd
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
+from nptdms import TdmsFile
 from scipy.constants import physical_constants
 
 cmap = matplotlib.colors.LinearSegmentedColormap('Cmap',
@@ -89,6 +90,9 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers=None,
             return np.loadtxt(path, unpack=True)
         elif path.endswith('.npy'):
             return np.load(path)
+        elif path.endswith('tdms'):
+            with TdmsFile.read(path) as f:
+                return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
@@ -126,6 +130,9 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
     if isinstance(path, str):
         if path.endswith('.txt'):
             return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
+        elif path.endswith('.tdms'):
+            with TdmsFile.read(path) as f:
+                return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
