@@ -231,10 +231,10 @@ class STM_bj_GUI(FileSystemEventHandler):
                 colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                 if colorbar_conf != "\n":
                     cmap = json.loads(colorbar_conf)
-                    if hasattr(self, 'hist_GS'):
+                    if self.run_config['plot_hist_GS']:
                         self.hist_GS.set_cmap(cmap=cmap)
                         self.canvas_GS.draw()
-                    if hasattr(self, 'hist_Gt'):
+                    if self.run_config['plot_hist_Gt']:
                         self.hist_Gt.set_cmap(cmap=cmap)
                         self.canvas_Gt.draw()
             except Exception as E:
@@ -247,52 +247,6 @@ class STM_bj_GUI(FileSystemEventHandler):
     def run(self):
         match self.is_run:
             case False:
-                path = self.directory_path.get()
-                if not os.path.isdir(path):
-                    try:
-                        path = json.loads(path)
-                    except Exception as E:
-                        tkinter.messagebox.showerror('Error', 'Invalid directory')
-                        return
-                for item in self.frame_figures.winfo_children():
-                    item.destroy()
-                gc.collect()
-                self.G = np.empty((0, self.extract_length.get()))
-                # hist G
-                if self.plot_hist_G.get():
-                    self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-                    self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
-                    self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                    self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
-                    self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                    self.autoscale_G = tk.BooleanVar(value=True)
-                    tk.Checkbutton(self.frame_figures, variable=self.autoscale_G, text="Autoscale").grid(row=1, column=4, sticky='w')
-                    self.canvas_G.draw()
-                # hist GS
-                if self.plot_hist_GS.get():
-                    self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
-                    self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
-                    self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                    self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
-                    self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
-                    self.canvas_GS.draw()
-                # hist Gt
-                if (self.is_raw.get() == 'raw') & self.plot_hist_Gt.get():
-                    self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
-                    self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figures)
-                    self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
-                    self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figures, pack_toolbar=False)
-                    self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
-                    self.canvas_Gt.draw()
-                # hist 2DCH
-                if self.plot_2DCH.get():
-                    self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
-                    self.canvas_2DCH = FigureCanvasTkAgg(self.hist_2DCH.fig, self.frame_figures)
-                    self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
-                    self.navtool_2DCH = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
-                    self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
-                    self.canvas_2DCH.draw()
-                self.colorbar_apply()
                 self.run_config = {
                     "length": self.extract_length.get(),
                     "upper": self.upper.get(),
@@ -304,8 +258,58 @@ class STM_bj_GUI(FileSystemEventHandler):
                     'X_scale': self.X_scale.get(),
                     't_scale': self.t_scale.get(),
                     'recursive': self.directory_recursive.get(),
-                    'data_type': self.is_raw.get()
+                    'data_type': self.is_raw.get(),
+                    'plot_hist_G': self.plot_hist_G.get(),
+                    'plot_hist_GS': self.plot_hist_GS.get(),
+                    'plot_hist_Gt': self.plot_hist_Gt.get(),
+                    'plot_2DCH': self.plot_2DCH.get()
                 }
+                path = self.directory_path.get()
+                if not os.path.isdir(path):
+                    try:
+                        path = json.loads(path)
+                    except Exception as E:
+                        tkinter.messagebox.showerror('Error', 'Invalid directory')
+                        return
+                for item in self.frame_figures.winfo_children():
+                    item.destroy()
+                gc.collect()
+                self.G = np.empty((0, self.run_config['length']))
+                # hist G
+                if self.run_config['plot_hist_G']:
+                    self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figures)
+                    self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                    self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
+                    self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
+                    self.autoscale_G = tk.BooleanVar(value=True)
+                    tk.Checkbutton(self.frame_figures, variable=self.autoscale_G, text="Autoscale").grid(row=1, column=4, sticky='w')
+                    self.canvas_G.draw()
+                # hist GS
+                if self.run_config['plot_hist_GS']:
+                    self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
+                    self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figures)
+                    self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                    self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figures, pack_toolbar=False)
+                    self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
+                    self.canvas_GS.draw()
+                # hist Gt
+                if (self.is_raw.get() == 'raw') & self.run_config['plot_hist_Gt']:
+                    self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
+                    self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figures)
+                    self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
+                    self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figures, pack_toolbar=False)
+                    self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
+                    self.canvas_Gt.draw()
+                # hist 2DCH
+                if self.run_config['plot_2DCH']:
+                    self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.canvas_2DCH = FigureCanvasTkAgg(self.hist_2DCH.fig, self.frame_figures)
+                    self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
+                    self.navtool_2DCH = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figures, pack_toolbar=False)
+                    self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
+                    self.canvas_2DCH.draw()
+                self.colorbar_apply()
                 self.status_traces.config(text=0)
                 self.time_init = None
                 threading.Thread(target=self.add_data, args=(path, )).start()
@@ -365,16 +369,16 @@ class STM_bj_GUI(FileSystemEventHandler):
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
-            if hasattr(self, 'hist_G'):
+            if self.run_config['plot_hist_G']:
                 self.hist_G.add_data(extracted, set_ylim=self.autoscale_G.get())
                 self.canvas_G.draw()
-            if hasattr(self, 'hist_GS'):
+            if self.run_config['plot_hist_GS']:
                 self.hist_GS.add_data(extracted)
                 self.canvas_GS.draw()
-            if hasattr(self, 'hist_Gt'):
+            if self.run_config['plot_hist_Gt']:
                 self.hist_Gt.add_data(time, extracted)
                 self.canvas_Gt.draw()
-            if hasattr(self, 'hist_2DCH'):
+            if self.run_config['plot_2DCH']:
                 self.hist_2DCH.add_data(extracted)
                 self.canvas_2DCH.draw()
             self.status_traces.config(text=self.G.shape[0])
@@ -725,13 +729,13 @@ class IVscan_GUI(FileSystemEventHandler):
                 colorbar_conf = self.colorbar_conf.get('0.0', 'end')
                 if colorbar_conf != "\n":
                     cmap = json.loads(colorbar_conf)
-                    if hasattr(self, 'hist_GV'):
+                    if self.run_config['plot_hist_GV']:
                         self.hist_GV.set_cmap(cmap=cmap)
                         self.canvas_GV.draw()
-                    if hasattr(self, 'hist_IV'):
+                    if self.run_config['plot_hist_IV']:
                         self.hist_IV.set_cmap(cmap=cmap)
                         self.canvas_IV.draw()
-                    if hasattr(self, 'hist_IVt'):
+                    if self.run_config['plot_hist_IVt']:
                         self.hist_IVt.set_cmap(cmap=cmap)
                         self.canvas_IVt.draw()
             except Exception as E:
@@ -744,47 +748,7 @@ class IVscan_GUI(FileSystemEventHandler):
     def run(self):
         match self.is_run:
             case False:
-                path = self.directory_path.get()
-                if not os.path.isdir(path):
-                    try:
-                        path = json.loads(path)
-                    except Exception as E:
-                        tkinter.messagebox.showerror('Error', 'Invalid directory')
-                        return
-                for item in self.frame_figure.winfo_children():
-                    item.destroy()
-                gc.collect()
-                self.I = np.empty((0, self.length.get()))
-                self.V = np.empty((0, self.length.get()))
                 full_length = self.num_segment.get() * self.length.get() + self.offset0.get() + self.offset1.get()
-                self.I_full = np.empty((0, full_length))
-                self.V_full = np.empty((0, full_length))
-                #hist GV
-                if self.plot_hist_GV.get():
-                    self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
-                    self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
-                    self.canvas_GV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
-                    self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
-                    self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
-                    self.canvas_GV.draw()
-                # hist IV
-                if self.plot_hist_IV.get():
-                    self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
-                    self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
-                    self.canvas_IV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
-                    self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
-                    self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
-                    self.canvas_IV.draw()
-                # hist IVt
-                if self.plot_hist_IVt.get():
-                    self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
-                                                    'wk' if self.mode.get() == 'Ewk' else 'bias')
-                    self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
-                    self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
-                    self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
-                    self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
-                    self.canvas_IVt.draw()
-                self.colorbar_apply()
                 self.run_config = {
                     "mode": self.mode.get(),
                     "Ebias": self.Ebias.get(),
@@ -807,8 +771,51 @@ class IVscan_GUI(FileSystemEventHandler):
                     'extract_method': self.extract_method.get(),
                     'V_scale': self.V_scale.get(),
                     'G_scale': self.G_scale.get(),
-                    'I_scale': self.I_scale.get()
+                    'I_scale': self.I_scale.get(),
+                    'plot_hist_GV': self.plot_hist_GV.get(),
+                    'plot_hist_IV': self.plot_hist_IV.get(),
+                    'plot_hist_IVt': self.plot_hist_IVt.get()
                 }
+                path = self.directory_path.get()
+                if not os.path.isdir(path):
+                    try:
+                        path = json.loads(path)
+                    except Exception as E:
+                        tkinter.messagebox.showerror('Error', 'Invalid directory')
+                        return
+                for item in self.frame_figure.winfo_children():
+                    item.destroy()
+                gc.collect()
+                self.I = np.empty((0, self.length.get()))
+                self.V = np.empty((0, self.length.get()))
+                self.I_full = np.empty((0, full_length))
+                self.V_full = np.empty((0, full_length))
+                #hist GV
+                if self.run_config['plot_hist_GV']:
+                    self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
+                    self.canvas_GV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                    self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
+                    self.navtool_GV.grid(row=1, column=5, columnspan=4, sticky='w')
+                    self.canvas_GV.draw()
+                # hist IV
+                if self.run_config['plot_hist_IV']:
+                    self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
+                    self.canvas_IV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                    self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
+                    self.navtool_IV.grid(row=1, column=0, columnspan=4, sticky='w')
+                    self.canvas_IV.draw()
+                # hist IVt
+                if self.run_config['plot_hist_IVt']:
+                    self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                                                    'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
+                    self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
+                    self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
+                    self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
+                    self.canvas_IVt.draw()
+                self.colorbar_apply()
                 if self.run_config['data_type'] == 'raw': self.pending = list()
                 self.status_cycles.config(text=0)
                 self.status_traces.config(text=0)
@@ -853,7 +860,8 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.pending.append(path)
                     list_files = copy.copy(self.pending[-self.run_config['num_files']:])
                     IV_raw = IVscan.load_data(list_files, max_workers=GUI.CPU_threads.get())[::-1]
-                    if hasattr(self, 'hist_GV') or hasattr(self, 'hist_IV'):
+                    has_value = []
+                    if self.run_config['plot_hist_IVt']:
                         I_full, V_full = IVscan.extract_data(IV_raw,
                                                              upper=self.run_config['V_upper'],
                                                              lower=self.run_config['V_lower'],
@@ -862,13 +870,15 @@ class IVscan_GUI(FileSystemEventHandler):
                                                              offset=self.run_config['offset'],
                                                              units=self.run_config['units'],
                                                              mode=self.run_config['extract_method'])
-                    if hasattr(self, 'hist_IVt'):
+                        has_value.append(I_full.size > 0)
+                    if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
                         I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
-                    if (I_full.size == 0) and (I.size == 0):
+                        has_value.append(I.size > 0)
+                    if any(has_value):
+                        self.pending.clear()
+                    else:
                         self.status_last_file.config(bg='lime')
                         return
-                    else:
-                        self.pending.clear()
                 case 'cut':
                     extracted = IVscan.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
@@ -877,42 +887,33 @@ class IVscan_GUI(FileSystemEventHandler):
             self.status_last_file.config(bg='red')
             return
         else:
-            I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
-            if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
-            if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
-            if I.size > 0:
-                match self.run_config['direction']:
-                    case '-→+':
-                        I, V = IVscan.split_scan_direction(I, V)[0]
-                    case '+→-':
-                        I, V = IVscan.split_scan_direction(I, V)[1]
+            if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
+                I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+                if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
+                if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
+                if I.size == 0:
+                    self.status_last_file.config(bg='lime')
+                    return
+                if self.run_config['direction'] == '-→+':
+                    I, V = IVscan.split_scan_direction(I, V)[0]
+                elif self.run_config['direction'] == '+→-':
+                    I, V = IVscan.split_scan_direction(I, V)[1]
+                if self.run_config['plot_hist_GV']:
+                    if self.run_config['mode'] == 'Ebias': self.hist_GV.add_data(I, V)
+                    elif self.run_config['mode'] == 'Ewk': self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
+                    self.canvas_GV.draw()
+                if self.run_config['plot_hist_IV']:
+                    self.hist_IV.add_data(I, V)
+                    self.canvas_IV.draw()
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+                self.status_traces.config(text=self.I.shape[0])
+            if self.run_config['plot_hist_IVt']:
+                self.hist_IVt.add_data(I_full, V_full)
+                self.canvas_IVt.draw()
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
-                match self.run_config['mode']:
-                    case 'Ebias':
-                        if hasattr(self, 'hist_GV'):
-                            self.hist_GV.add_data(I, V)
-                            self.canvas_GV.draw()
-                        if hasattr(self, 'hist_IV'):
-                            self.hist_IV.add_data(I, V)
-                            self.canvas_IV.draw()
-                        if hasattr(self, 'hist_IVt'):
-                            self.hist_IVt.add_data(I_full, V_full)
-                            self.canvas_IVt.draw()
-                    case 'Ewk':
-                        if hasattr(self, 'hist_GV'):
-                            self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
-                            self.canvas_GV.draw()
-                        if hasattr(self, 'hist_IV'):
-                            self.hist_IV.add_data(I, V)
-                            self.canvas_IV.draw()
-                        if hasattr(self, 'hist_IVt'):
-                            self.hist_IVt.add_data(I_full, V_full)
-                            self.canvas_IVt.draw()
                 self.status_cycles.config(text=self.I_full.shape[0])
-                self.status_traces.config(text=self.I.shape[0])
             self.status_last_file.config(bg='lime')
 
     def import_setting(self):
