@@ -1,7 +1,9 @@
+import argparse
 import atexit
 import copy
 import gc
 import json
+import logging
 import multiprocessing
 import os
 import sys
@@ -28,7 +30,7 @@ from CHClab import IVscan, STM_bj
 class Main:
 
     def __init__(self) -> None:
-        self.window = tk.Tk()
+        self.window = root
         self.window.title('STM histogram')
         self.window.protocol("WM_DELETE_WINDOW", sys.exit)
         self.window.resizable(False, False)
@@ -44,7 +46,8 @@ class Main:
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
-        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
+        tk.Button(self.window, text='Log', command=handler.show).grid(row=0, column=1, sticky='ne')
+        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=2, padx=10, sticky='ne')
         self.window.bind("<Control-t>", lambda *args: self.new_tab(self.option.get()))
         self.tabcontrol.bind("<Triple-1>", self.close_tab)
         self.window.bind("<Control-w>", self.close_tab)
@@ -342,7 +345,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.status_last_file.config(bg='lime')
                     return
         else:
-            self.status_last_file.config(text=f"{len(path)} files" if len(path)>1 else path[0], bg='yellow')
+            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
         try:
             logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
@@ -842,7 +845,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.status_last_file.config(bg='lime')
                     return
         elif isinstance(path, list):
-            self.status_last_file.config(text=f"{len(path)} files" if len(path)>1 else path[0], bg='yellow')
+            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
         try:
             logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
@@ -861,10 +864,11 @@ class IVscan_GUI(FileSystemEventHandler):
                                                              mode=self.run_config['extract_method'])
                     if hasattr(self, 'hist_IVt'):
                         I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
-                    if (I_full.size==0) and (I.size==0): 
+                    if (I_full.size == 0) and (I.size == 0):
                         self.status_last_file.config(bg='lime')
                         return
-                    else: self.pending.clear()
+                    else:
+                        self.pending.clear()
                 case 'cut':
                     extracted = IVscan.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                     V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
@@ -1126,19 +1130,44 @@ class IVscan_export_prompt:
         self.hide()
 
 
+class Logging_GUI(logging.Handler):
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        self.window = tk.Toplevel()
+        self.hide()
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
+        self.window.title('Log')
+        self.window.resizable(True, True)
+        self.widget = tk.Text(self.window, height=30, width=120)
+        self.widget.pack(side='top', fill='both', expand=True)
+        self.widget.config(state='disabled')
+
+    def emit(self, record):
+        self.widget.config(state='normal')
+        self.widget.insert(tk.END, self.format(record) + '\n')
+        self.widget.see(tk.END)
+        self.widget.config(state='disabled')
+
+    def show(self):
+        self.window.deiconify()
+
+    def hide(self):
+        self.window.withdraw()
+
+
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # PyInstaller
-    import argparse
-    import logging
+    matplotlib.use('TkAgg')
+    plt.ioff()
+    root = tk.Tk()
     parser = argparse.ArgumentParser(description='Run GUI')
     parser.add_argument('--debug', action='store_true')
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
-    handler = logging.StreamHandler(sys.stdout)
+    handler = Logging_GUI()
     handler.setFormatter(formatter)
     logger = logging.getLogger('App')
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG if parser.parse_args().debug else logging.WARNING)
-    matplotlib.use('TkAgg')
-    plt.ioff()
     GUI = Main()
     tk.mainloop()
