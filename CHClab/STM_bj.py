@@ -21,11 +21,11 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
         if len(index):
             split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
-            if method=='pull':
+            if method == 'pull':
                 return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
-            elif method ==  'crash':
+            elif method == 'crash':
                 return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
-            elif method ==  'both':
+            elif method == 'both':
                 return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
@@ -40,7 +40,7 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
         x_conversion (float, optional): point per displacement
 
     Returns:
-        x (ndarray): 2D x array with shape (trace, length)
+        X (ndarray): 2D X array with shape (trace, length)
     """
     is_pull = G[:, 0] > G[:, -1]
     _, X = np.mgrid[:G.shape[0], :G.shape[-1]]
@@ -79,37 +79,10 @@ class Hist_G(Hist1D):
         for i, j in zip(*peak_position):
             self.ax.annotate(f'{i:1.2E}', xy=(i, j+0.02), ha='center', fontsize=8)'''
 
-    def get_peak(self, *, window_length=25, polyorder=5, prominence=0.05):
-        """
-        Get peak position and width by fitting Gaussian function
-
-        Args:
-            window_length (int)
-            polyorder (int)
-            prominence (float)
-
-        Returns:
-            height (ndarray): peak height
-            avg (ndarray): average
-            stdev (ndarray): standard derivative
-        """
-        X = np.sqrt(self.x_bins[:-1] * self.x_bins[1:])
-        Y = self.height
-        return get_peak(X, Y, window_length=window_length, polyorder=polyorder, prominence=prominence)
-
 
 class Hist_GS(Hist2D):
 
-    def __init__(self,
-                 xlim: tuple = (-0.3, 0.5),
-                 ylim: tuple = (1e-5, 10**0.5),
-                 num_x_bin: float = 800,
-                 num_y_bin: float = 550,
-                 xscale: Literal['linear', 'log'] = 'linear',
-                 yscale: Literal['linear', 'log'] = 'log',
-                 zero_point: float = 0.5,
-                 x_conversion: float = 800,
-                 **kwargs) -> None:
+    def __init__(self, xlim: tuple = (-0.3, 0.5), ylim: tuple = (1e-5, 10**0.5), num_x_bin: float = 800, num_y_bin: float = 550, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', zero_point: float = 0.5, x_conversion: float = 800, **kwargs) -> None:
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('Displacement (nm)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
@@ -117,15 +90,21 @@ class Hist_GS(Hist2D):
         self.zero_point = zero_point
         self.x_conversion = x_conversion
 
-    def add_data(self, G: np.ndarray, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, X: np.ndarray = None, **kwargs) -> None:
         """
         Add data into 2D histogram (GS)
 
         Args:
             G (ndarray): 2D G array with shape (trace, length)
+            X (ndarray, optional): 2D X array with shape (trace, length)
+            
+        Returns:
+            X (ndarray): 2D X array with shape (trace, length)
         """
-        x = get_displacement(G, zero_point=self.zero_point, x_conversion=self.x_conversion)
-        super().add_data(x, G, **kwargs)
+        if X is None:
+            X = get_displacement(G, zero_point=self.zero_point, x_conversion=self.x_conversion)
+        super().add_data(X, G, **kwargs)
+        return X
 
 
 class Hist_Gt(Hist2D):
@@ -176,6 +155,6 @@ class Hist_Correlation(Hist2D):
             self.N = np.concatenate([self.N, N], axis=0)
         else:
             self.N = N
-        with np.errstate(divide='ignore',invalid='ignore'):
+        with np.errstate(divide='ignore', invalid='ignore'):
             self.height = np.corrcoef(self.N, rowvar=False)
         self.plot.set_array(self.height.T)

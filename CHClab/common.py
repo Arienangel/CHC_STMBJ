@@ -12,6 +12,7 @@ import pandas as pd
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
+from nptdms import TdmsFile
 from scipy.constants import physical_constants
 
 cmap = matplotlib.colors.LinearSegmentedColormap('Cmap',
@@ -73,30 +74,6 @@ def multi_gaussian(x: np.ndarray, *args: float):
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
 
 
-def get_peak(X: np.ndarray, Y: np.ndarray, *, window_length=25, polyorder=5, prominence=0.05):
-    """
-    Get peak position and width by fitting Gaussian function
-
-    Args:
-        X (np.ndarray)
-        Y (np.ndarray)
-        window_length (int)
-        polyorder (int)
-        prominence (float)
-
-    Returns:
-        height (ndarray): peak height
-        avg (ndarray): average
-        stdev (ndarray): standard derivative
-    """
-    y = (Y - Y.min()) / (Y.max() - Y.min())
-    y = scipy.signal.savgol_filter(y, window_length, polyorder)
-    peak, *_ = scipy.signal.find_peaks(y, prominence=prominence)
-    _, _, left, right = scipy.signal.peak_widths(y, peak, rel_height=1)
-    left, right = np.ceil(left).astype(int), np.ceil(right).astype(int)
-    return np.stack([scipy.optimize.curve_fit(gaussian, X[left[i]:right[i]], Y[left[i]:right[i]], bounds=(0, np.inf))[0] for i in range(left.size)]).T
-
-
 def load_data(path: Union[str, list], recursive: bool = False, max_workers=None, **kwargs) -> np.ndarray:
     """
     Load data from text files.
@@ -113,6 +90,9 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers=None,
             return np.loadtxt(path, unpack=True)
         elif path.endswith('.npy'):
             return np.load(path)
+        elif path.endswith('tdms'):
+            with TdmsFile.read(path) as f:
+                return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
@@ -150,6 +130,9 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
     if isinstance(path, str):
         if path.endswith('.txt'):
             return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
+        elif path.endswith('.tdms'):
+            with TdmsFile.read(path) as f:
+                return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
@@ -197,13 +180,13 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple, num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple, num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
         self.xscale = xscale
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
@@ -235,6 +218,25 @@ class Hist1D:
         self.height.fill(0)
         self.plot.set_data(self.height)
 
+    def fitting(self, x_range: list = [-np.inf, np.inf], p0: list = None, bounds: list = None) -> tuple:
+        """
+        Args:
+            x_range (list, optional): x range used to fit with height_per_trace, always in linear scale
+            p0 (list, optional): Initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+
+        Returns:
+            tuple[ndarray, ndarray]: return fitting values and its parameters
+        """
+        f = np.where((self.x > min(x_range)) & (self.x < max(x_range)))
+        x = self.x if self.xscale == 'linear' else np.log10(self.x)
+        param = scipy.optimize.curve_fit(multi_gaussian, x[f], self.height_per_trace[f], p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0]
+        return multi_gaussian(x, *param), param
+
+    def plot_fitting(self, x_range: list = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs):
+        fit, param = self.fitting(x_range, p0, bounds)
+        return self.ax.plot(self.x, fit, *args, **kwargs), param
+
 
 class Hist2D:
     """
@@ -258,7 +260,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple, ylim: tuple, num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', **kwargs) -> None:
+    def __init__(self, xlim: tuple, ylim: tuple, num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
@@ -266,7 +268,7 @@ class Hist2D:
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)
@@ -315,3 +317,28 @@ class Hist2D:
         if isinstance(cmap, dict):
             cmap = matplotlib.colors.LinearSegmentedColormap('Cmap', segmentdata=cmap, N=256)
         self.plot.set_cmap(cmap)
+
+    def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0):
+        """
+        Args:
+            axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
+            p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+            sigma (float|list, optional): standard derivative
+
+        Returns:
+            ndarray: return fitting values for each x or y value
+        """
+        if axis == 'x':
+            A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace]).T
+            return U + np.expand_dims(sigma, -1) * S if self.yscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
+        elif axis == 'y':
+            A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace.T]).T
+            return U + np.expand_dims(sigma, -1) * S if self.xscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
+
+    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, *args, **kwargs):
+        fit = self.fitting(axis, p0, bounds, sigma)
+        if axis == 'x':
+            return self.ax.plot(self.x, fit.T, *args, **kwargs)
+        elif axis == 'y':
+            return self.ax.plot(self.y, fit.T, *args, **kwargs)

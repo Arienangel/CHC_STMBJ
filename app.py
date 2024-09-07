@@ -1,7 +1,9 @@
+import argparse
 import atexit
 import copy
 import gc
 import json
+import logging
 import multiprocessing
 import os
 import sys
@@ -28,7 +30,7 @@ from CHClab import IVscan, STM_bj
 class Main:
 
     def __init__(self) -> None:
-        self.window = tk.Tk()
+        self.window = root
         self.window.title('STM histogram')
         self.window.protocol("WM_DELETE_WINDOW", sys.exit)
         self.window.resizable(False, False)
@@ -44,7 +46,8 @@ class Main:
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
         self.tabcontrol = ttk.Notebook(self.window)
         self.tabcontrol.grid(row=1, columnspan=2, sticky='nw')
-        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=1, padx=10, sticky='ne')
+        tk.Button(self.window, text='Log', command=handler.show).grid(row=0, column=1, sticky='ne')
+        tk.Button(self.window, text='❌', fg='red', command=self.close_tab).grid(row=0, column=2, padx=10, sticky='ne')
         self.window.bind("<Control-t>", lambda *args: self.new_tab(self.option.get()))
         self.tabcontrol.bind("<Triple-1>", self.close_tab)
         self.window.bind("<Control-w>", self.close_tab)
@@ -260,8 +263,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                 self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figures, pack_toolbar=False)
                 self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                self.auto_normalize_G = tk.BooleanVar(value=True)
-                tk.Checkbutton(self.frame_figures, variable=self.auto_normalize_G, text="Auto normalize").grid(row=1, column=4, sticky='w')
+                self.autoscale_G = tk.BooleanVar(value=True)
+                tk.Checkbutton(self.frame_figures, variable=self.autoscale_G, text="Autoscale").grid(row=1, column=4, sticky='w')
                 self.canvas_G.draw()
             # hist GS
             if self.plot_hist_GS.get():
@@ -333,13 +336,14 @@ class STM_bj_GUI(FileSystemEventHandler):
 
     def add_data(self, path):
         if isinstance(path, str):
-            self.status_last_file.config(text=path)
+            self.status_last_file.config(text=path, bg='yellow')
             if os.path.isdir(path):
                 if not os.listdir(path):  # empty directory
                     self.time_init = 0
+                    self.status_last_file.config(bg='lime')
                     return
         else:
-            self.status_last_file.config(text=f"{len(path)} files")
+            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
         try:
             logger.debug(f'Add data: {path}')
             if self.run_config['data_type'] == 'raw':
@@ -354,11 +358,12 @@ class STM_bj_GUI(FileSystemEventHandler):
                 extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
+            self.status_last_file.config(bg='red')
             return
         if extracted.size > 0:
             self.G = np.vstack([self.G, extracted])
             if hasattr(self, 'hist_G'):
-                self.hist_G.add_data(extracted, set_ylim=self.auto_normalize_G.get())
+                self.hist_G.add_data(extracted, set_ylim=self.autoscale_G.get())
                 self.canvas_G.draw()
             if hasattr(self, 'hist_GS'):
                 self.hist_GS.add_data(extracted)
@@ -370,6 +375,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.hist_2DCH.add_data(extracted)
                 self.canvas_2DCH.draw()
             self.status_traces.config(text=self.G.shape[0])
+        self.status_last_file.config(bg='lime')
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
@@ -584,6 +590,7 @@ class IVscan_GUI(FileSystemEventHandler):
         self.length = tk.IntVar(value=1200)
         self.offset0 = tk.IntVar(value=1200)
         self.offset1 = tk.IntVar(value=1200)
+        self.extract_method = tk.StringVar(value='height')
         tk.Label(self.frame_config, text='V upper/\nlower: ').grid(row=3, column=0)
         frame_Vlimit = tk.Frame(self.frame_config)
         frame_Vlimit.grid(row=3, column=1)
@@ -596,6 +603,8 @@ class IVscan_GUI(FileSystemEventHandler):
         frame_offset.grid(row=3, column=5)
         tk.Entry(frame_offset, textvariable=self.offset0, justify='center', width=10).pack(side='left')
         tk.Entry(frame_offset, textvariable=self.offset1, justify='center', width=10).pack(side='left')
+        tk.Label(self.frame_config, text='Method: ').grid(row=3, column=6)
+        tk.OptionMenu(self.frame_config, self.extract_method, *['height', 'gradient']).grid(row=3, column=7)
         # row 4
         self.I_limit = tk.DoubleVar(value=1e-5)
         self.is_noise_remove = tk.BooleanVar(value=True)
@@ -749,7 +758,7 @@ class IVscan_GUI(FileSystemEventHandler):
             if self.plot_hist_GV.get():
                 self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                 self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
-                self.canvas_GV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                self.canvas_GV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                 self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
                 self.navtool_GV.grid(row=1, column=0, columnspan=4, sticky='w')
                 self.canvas_GV.draw()
@@ -757,7 +766,7 @@ class IVscan_GUI(FileSystemEventHandler):
             if self.plot_hist_IV.get():
                 self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                 self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
-                self.canvas_IV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                self.canvas_IV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                 self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
                 self.navtool_IV.grid(row=1, column=5, columnspan=4, sticky='w')
                 self.canvas_IV.draw()
@@ -790,6 +799,7 @@ class IVscan_GUI(FileSystemEventHandler):
                 'is_zeroing': self.is_zeroing.get(),
                 'zeroing_center': self.zeroing_center.get(),
                 'direction': self.direction.get(),
+                'extract_method': self.extract_method.get(),
                 'V_scale': self.V_scale.get(),
                 'G_scale': self.G_scale.get(),
                 'I_scale': self.I_scale.get()
@@ -823,71 +833,74 @@ class IVscan_GUI(FileSystemEventHandler):
 
     def add_data(self, path):
         if isinstance(path, str):
-            self.status_last_file.config(text=path)
+            self.status_last_file.config(text=path, bg='yellow')
             if os.path.isdir(path):
-                if not os.listdir(path): return  # empty directory
+                if not os.listdir(path):  # empty directory
+                    self.status_last_file.config(bg='lime')
+                    return
         elif isinstance(path, list):
-            self.status_last_file.config(text=f"{len(path)} files")
+            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
         try:
             logger.debug(f'Add data: {path}')
             if self.run_config['data_type'] == 'raw':
                 self.pending.append(path)
                 list_files = copy.copy(self.pending[-self.run_config['num_files']:])
-                IV_full = IVscan.extract_data(list_files,
-                                              upper=self.run_config['V_upper'],
-                                              lower=self.run_config['V_lower'],
-                                              length_segment=self.run_config['length_segment'],
-                                              num_segment=self.run_config['num_segment'],
-                                              offset=self.run_config['offset'],
-                                              units=self.run_config['units'],
-                                              max_workers=GUI.CPU_threads.get())
-                if IV_full.size == 0: return
-                else:
-                    logger.debug(f'{IV_full.shape[1]} Fullcycle detected in {list_files}')
-                    I_full, V_full = IV_full
-                    I, V = np.concatenate(list(map(lambda A: IVscan.extract_data(A, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=[1, 1]), np.swapaxes(IV_full, 0, 1))), axis=1)
+                IV_raw = IVscan.load_data(list_files, max_workers=GUI.CPU_threads.get())[::-1]
+                has_value = []
+                if hasattr(self, 'hist_IVt'):
+                    I_full, V_full = IVscan.extract_data(IV_raw,
+                                                         upper=self.run_config['V_upper'],
+                                                         lower=self.run_config['V_lower'],
+                                                         length_segment=self.run_config['length_segment'],
+                                                         num_segment=self.run_config['num_segment'],
+                                                         offset=self.run_config['offset'],
+                                                         units=self.run_config['units'],
+                                                         mode=self.run_config['extract_method'])
+                    has_value.append(I_full.size > 0)
+                if hasattr(self, 'hist_GV') or hasattr(self, 'hist_IV'):
+                    I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
+                    has_value.append(I.size > 0)
+                if any(has_value):
                     self.pending.clear()
+                else:
+                    self.status_last_file.config(bg='lime')
+                    return
             elif self.run_config['data_type'] == 'cut':
                 extracted = IVscan.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
                 V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
+            self.status_last_file.config(bg='red')
             return
         else:
-            I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
-            if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
-            if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
-            if I.size > 0:
+            if hasattr(self, 'hist_GV') or hasattr(self, 'hist_IV'):
+                I, V = IVscan.noise_remove(I, V, I_limit=self.run_config['I_limit'])
+                if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
+                if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
+                if I.size == 0:
+                    self.status_last_file.config(bg='lime')
+                    return
                 if self.run_config['direction'] == '-→+':
                     I, V = IVscan.split_scan_direction(I, V)[0]
                 elif self.run_config['direction'] == '+→-':
                     I, V = IVscan.split_scan_direction(I, V)[1]
+                if hasattr(self, 'hist_GV'):
+                    if self.run_config['mode'] == 'Ebias': self.hist_GV.add_data(I, V)
+                    elif self.run_config['mode'] == 'Ewk': self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
+                    self.canvas_GV.draw()
+                if hasattr(self, 'hist_IV'):
+                    self.hist_IV.add_data(I, V)
+                    self.canvas_IV.draw()
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+            if hasattr(self, 'hist_IVt'):
+                self.hist_IVt.add_data(I_full, V_full)
+                self.canvas_IVt.draw()
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
-                if self.run_config['mode'] == 'Ebias':
-                    if hasattr(self, 'hist_GV'):
-                        self.hist_GV.add_data(I, V)
-                        self.canvas_GV.draw()
-                    if hasattr(self, 'hist_IV'):
-                        self.hist_IV.add_data(I, V)
-                        self.canvas_IV.draw()
-                    if hasattr(self, 'hist_IVt'):
-                        self.hist_IVt.add_data(I_full, V_full)
-                        self.canvas_IVt.draw()
-                elif self.run_config['mode'] == 'Ewk':
-                    if hasattr(self, 'hist_GV'):
-                        self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
-                        self.canvas_GV.draw()
-                    if hasattr(self, 'hist_IV'):
-                        self.hist_IV.add_data(I, V)
-                        self.canvas_IV.draw()
-                    if hasattr(self, 'hist_IVt'):
-                        self.hist_IVt.add_data(I_full, V_full)
-                        self.canvas_IVt.draw()
-                self.status_cycles.config(text=self.I_full.shape[0])
-                self.status_traces.config(text=self.I.shape[0])
+            self.status_cycles.config(text=self.I_full.shape[0])
+            self.status_traces.config(text=self.I.shape[0])
+            self.status_last_file.config(bg='lime')
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
@@ -916,6 +929,7 @@ class IVscan_GUI(FileSystemEventHandler):
             'Zeroing': self.is_zeroing,
             'Zeroing center': self.zeroing_center,
             'Direction': self.direction,
+            'Extract_method': self.extract_method,
             'V min': self.V_min,
             'V max': self.V_max,
             'V #bins': self.V_bins,
@@ -1067,6 +1081,7 @@ class IVscan_export_prompt:
                 'Zeroing': self.root.is_zeroing.get(),
                 'Zeroing center': self.root.zeroing_center.get(),
                 'Direction': self.root.direction.get(),
+                'Extract_method': self.root.extract_method.get(),
                 'V min': self.root.V_min.get(),
                 'V max': self.root.V_max.get(),
                 'V #bins': self.root.V_bins.get(),
@@ -1101,19 +1116,44 @@ class IVscan_export_prompt:
         self.hide()
 
 
+class Logging_GUI(logging.Handler):
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        self.window = tk.Toplevel()
+        self.hide()
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
+        self.window.title('Log')
+        self.window.resizable(True, True)
+        self.widget = tk.Text(self.window, height=30, width=120)
+        self.widget.pack(side='top', fill='both', expand=True)
+        self.widget.config(state='disabled')
+
+    def emit(self, record):
+        self.widget.config(state='normal')
+        self.widget.insert(tk.END, self.format(record) + '\n')
+        self.widget.see(tk.END)
+        self.widget.config(state='disabled')
+
+    def show(self):
+        self.window.deiconify()
+
+    def hide(self):
+        self.window.withdraw()
+
+
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # PyInstaller
-    import argparse
-    import logging
+    matplotlib.use('TkAgg')
+    plt.ioff()
+    root = tk.Tk()
     parser = argparse.ArgumentParser(description='Run GUI')
     parser.add_argument('--debug', action='store_true')
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
-    handler = logging.StreamHandler(sys.stdout)
+    handler = Logging_GUI()
     handler.setFormatter(formatter)
     logger = logging.getLogger('App')
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG if parser.parse_args().debug else logging.WARNING)
-    matplotlib.use('TkAgg')
-    plt.ioff()
     GUI = Main()
     tk.mainloop()
