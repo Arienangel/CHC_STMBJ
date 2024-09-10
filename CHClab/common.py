@@ -74,13 +74,14 @@ def multi_gaussian(x: np.ndarray, *args: float):
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
 
 
-def load_data(path: Union[str, list], recursive: bool = False, max_workers=None, **kwargs) -> np.ndarray:
+def load_data(path: Union[str, list], recursive: bool = False, max_workers: int = None, **kwargs) -> np.ndarray:
     """
     Load data from text files.
 
     Args:
         path (str): directory of files, zip file, or txt file
         recursive (bool, optional): read txt files in folder recursively
+        max_workers (int, optional): maximum number of processes that can be used
 
     Returns:
         out (ndarray): Data read from the text files.
@@ -100,7 +101,7 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers=None,
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
-        return np.concatenate(list(map(lambda path: load_data(path, recursive, max_workers, **kwargs), path)), axis=-1)
+        return np.concatenate(list(map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
 
 
 def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> np.ndarray:
@@ -123,6 +124,7 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
     Args:
         path (str): directory of files, zip file, or txt file
         recursive (bool, optional): read txt files in folder recursively
+        max_workers (int, optional): maximum number of processes that can be used
 
     Returns:
         out (DataFrame): File path, data read from the text files and unix time.
@@ -149,7 +151,7 @@ def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive:
         path = folder
         df = pd.DataFrame()
         df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
-        df['data'] = df['path'].apply(lambda f: dt.rbind(dt.iread(f)).to_numpy().T.squeeze())
+        df['data'] = df['path'].apply(lambda f: dt.fread(f).to_numpy().T.squeeze())
         df['time'] = df['path'].apply(os.path.getmtime)
         return df[['path', 'data', 'time']]
     elif zipfile:
@@ -157,7 +159,7 @@ def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive:
         df = pd.DataFrame()
         with ZipFile(path) as zf:
             df['path'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
-            df['data'] = df['path'].apply(lambda f: dt.rbind(dt.iread(zf.read(f))).to_numpy().T.squeeze())
+            df['data'] = df['path'].apply(lambda f: dt.fread(zf.read(f)).to_numpy().T.squeeze())
             df['time'] = df['path'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
         return df[['path', 'data', 'time']]
 

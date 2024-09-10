@@ -189,7 +189,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=5, column=7)
         # row 6
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
-        self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
+        self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none', undo=True, maxundo=-1)
         self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
@@ -272,7 +272,7 @@ class STM_bj_GUI(FileSystemEventHandler):
             for item in self.frame_figures.winfo_children():
                 item.destroy()
             gc.collect()
-            self.G = np.empty((0, self.extract_length.get()))
+            self.G = np.empty((0, self.run_config['length']))
             # hist G
             if self.run_config['plot_hist_G']:
                 self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
@@ -314,6 +314,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.add_data(path) # fix win7 freeze
                 return
             else:
+                self.add_data(path)
                 self.observer = Observer()
                 self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
                 self.observer.start()
@@ -321,7 +322,6 @@ class STM_bj_GUI(FileSystemEventHandler):
                 atexit.register(self.observer.stop)
                 self.run_button.config(text='Stop', bg='red')
                 self.is_run = True
-                self.add_data(path)
         else:
             self.run_button.config(text='Run', bg='lime')
             self.is_run = False
@@ -361,8 +361,12 @@ class STM_bj_GUI(FileSystemEventHandler):
                 if not self.time_init: self.time_init = time.min()
                 time = time - self.time_init
             elif self.run_config['data_type'] == 'cut':
-                extracted = STM_bj.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
-                extracted = np.stack(np.split(extracted, extracted.size // self.run_config['length']))
+                df = STM_bj.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())['data']
+                length = df.apply(lambda x: x.shape[-1])
+                max_length = max(*length, self.run_config['length'])
+                df[length < max_length] = df[length < max_length].apply(lambda x: np.pad(x, (0, max_length - x.shape[-1]), 'constant', constant_values=0))
+                extracted = np.stack(df)
+                self.G = np.empty((0, max_length))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
             self.status_last_file.config(bg='red')
@@ -686,7 +690,7 @@ class IVscan_GUI(FileSystemEventHandler):
         tk.OptionMenu(self.frame_config, self.t_scale, *['log', 'linear']).grid(row=8, column=7)
         # row 9
         tk.Label(self.frame_config, text='Colorbar: ').grid(row=9, column=0)
-        self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none')
+        self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none', undo=True, maxundo=-1)
         self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=9, column=1, columnspan=5, sticky='w')
         self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
@@ -702,8 +706,8 @@ class IVscan_GUI(FileSystemEventHandler):
         self.plot_hist_IV = tk.BooleanVar(value=True)
         self.plot_hist_IVt = tk.BooleanVar(value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram IV', variable=self.plot_hist_IV).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram IVt', variable=self.plot_hist_IVt).pack(side='left')
         # figure frame
         self.frame_figure = tk.Frame(self.window)
@@ -754,7 +758,7 @@ class IVscan_GUI(FileSystemEventHandler):
                 'recursive': self.directory_recursive.get(),
                 'data_type': self.is_raw.get(),
                 'num_segment': self.num_segment.get(),
-                'num_files': full_length // self.points_per_file.get() + 2,
+                'num_files': full_length // self.points_per_file.get() + 3,
                 "V_upper": self.V_upper.get(),
                 "V_lower": self.V_lower.get(),
                 "length_segment": self.length.get(),
@@ -815,6 +819,7 @@ class IVscan_GUI(FileSystemEventHandler):
                 self.canvas_IVt.draw()
             self.colorbar_apply()
             if self.run_config['data_type'] == 'raw': self.pending = list()
+            self.status_cycles.config(text=0)
             self.status_traces.config(text=0)
             if isinstance(path, list):
                 self.add_data(path) # fix win7 freeze
@@ -856,31 +861,34 @@ class IVscan_GUI(FileSystemEventHandler):
         try:
             logger.debug(f'Add data: {path}')
             if self.run_config['data_type'] == 'raw':
-                self.pending.append(path)
-                list_files = copy.copy(self.pending[-self.run_config['num_files']:])
-                IV_raw = IVscan.load_data(list_files, max_workers=GUI.CPU_threads.get())[::-1]
-                has_value = []
-                if self.run_config['plot_hist_IVt']:
-                    I_full, V_full = IVscan.extract_data(IV_raw,
-                                                         upper=self.run_config['V_upper'],
-                                                         lower=self.run_config['V_lower'],
-                                                         length_segment=self.run_config['length_segment'],
-                                                         num_segment=self.run_config['num_segment'],
-                                                         offset=self.run_config['offset'],
-                                                         units=self.run_config['units'],
-                                                         mode=self.run_config['extract_method'])
-                    has_value.append(I_full.size > 0)
-                if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
-                    I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
-                    has_value.append(I.size > 0)
-                if any(has_value):
-                    self.pending.clear()
-                else:
+                self.pending.append(IVscan.load_data(path, max_workers=GUI.CPU_threads.get())[::-1])
+                if len(self.pending) > self.run_config['num_files']: del self.pending[:-self.run_config['num_files']]
+                IV_raw = np.concatenate(self.pending, axis=1)
+                I_full, V_full = IVscan.extract_data(IV_raw,
+                                                     upper=self.run_config['V_upper'],
+                                                     lower=self.run_config['V_lower'],
+                                                     length_segment=self.run_config['length_segment'],
+                                                     num_segment=self.run_config['num_segment'],
+                                                     offset=self.run_config['offset'],
+                                                     units=self.run_config['units'],
+                                                     mode=self.run_config['extract_method'])
+                if I_full.size == 0:
                     self.status_last_file.config(bg='lime')
                     return
+                else:
+                    ind = np.where(V_full[-1, -1] == self.pending[-1][1])[0]
+                    if ind.size: self.pending = [self.pending[-1][:, ind[-1]:]]
+                    else: self.pending = []
+                    if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
+                        I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
             elif self.run_config['data_type'] == 'cut':
-                extracted = IVscan.load_data(path, **self.run_config, max_workers=GUI.CPU_threads.get())
-                V, I = np.stack(np.split(extracted, extracted.shape[1] // self.run_config['length'], axis=-1)).swapaxes(0, 1) * np.expand_dims(self.run_config['units'][::-1], axis=(1, 2))
+                df = IVscan.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())['data']
+                length = df.apply(lambda x: x.shape[-1])
+                max_length = max(*length, self.run_config['length_segment'])
+                df[length < max_length] = df[length < max_length].apply(lambda x: np.pad(x, ((0, 0), (0, max_length - x.shape[-1])), 'constant', constant_values=0))
+                V, I = np.stack(df).swapaxes(0, 1)
+                self.I = np.empty((0, max_length))
+                self.V = np.empty((0, max_length))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
             self.status_last_file.config(bg='red')
@@ -906,13 +914,13 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IV.draw()
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+                self.status_traces.config(text=self.I.shape[0])
             if self.run_config['plot_hist_IVt']:
                 self.hist_IVt.add_data(I_full, V_full)
                 self.canvas_IVt.draw()
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
-            self.status_cycles.config(text=self.I_full.shape[0])
-            self.status_traces.config(text=self.I.shape[0])
+                self.status_cycles.config(text=self.I_full.shape[0])
             self.status_last_file.config(bg='lime')
 
     def import_setting(self):
