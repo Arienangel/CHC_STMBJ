@@ -1,11 +1,14 @@
 import concurrent.futures
 import glob
+import logging
 import os
 from typing import Literal, Union
 from zipfile import ZipFile
 
 import datatable as dt
 import matplotlib.colors
+import matplotlib.lines
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -228,16 +231,28 @@ class Hist1D:
             bounds (list, optional): Lower and upper bounds on parameters
 
         Returns:
-            tuple[ndarray, ndarray]: return fitting values and its parameters
+            ndarray: fitting results
+            ndarray: fitting parameters (A, U, S)
         """
         f = np.where((self.x > min(x_range)) & (self.x < max(x_range)))
         x = self.x if self.xscale == 'linear' else np.log10(self.x)
         param = scipy.optimize.curve_fit(multi_gaussian, x[f], self.height_per_trace[f], p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0]
         return multi_gaussian(x, *param), param
 
-    def plot_fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs):
-        fit, param = self.fitting(x_range, p0, bounds)
-        return self.ax.plot(self.x, fit, *args, **kwargs), param
+    def plot_fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs) -> tuple[np.ndarray, np.ndarray, list[matplotlib.lines.Line2D]]:
+        """
+        Args:
+            x_range (list, optional): x range used to fit with height_per_trace, always in linear scale
+            p0 (list, optional): Initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+
+        Returns:
+            ndarray: fitting results
+            ndarray: fitting parameters (A, U, S)
+            list: matplotlib Line2D objects
+        """
+        fit, params = self.fitting(x_range, p0, bounds)
+        return fit, params, self.ax.plot(self.x, fit, *args, **kwargs)
 
 
 class Hist2D:
@@ -320,29 +335,50 @@ class Hist2D:
             cmap = matplotlib.colors.LinearSegmentedColormap('Cmap', segmentdata=cmap, N=256)
         self.plot.set_cmap(cmap)
 
-    def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float | list = 0):
+    def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float | list = 0, default_values: list[float] = [np.nan, np.nan, np.nan]) -> np.ndarray:
         """
         Args:
             axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
             p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
             bounds (list, optional): Lower and upper bounds on parameters
             sigma (float|list, optional): standard derivative
+            default_values (list, optional): values used when least-square minimization failed
 
         Returns:
-            ndarray: return fitting values for each x or y value
+            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
         """
+
+        def gaussian_fit(label, xdata, ydata, p0, bounds):
+            try:
+                return scipy.optimize.curve_fit(gaussian, xdata, ydata, p0=p0, bounds=bounds)[0]
+            except Exception as E:
+                logging.warning(f'Least-square minimization failed at {axis}={label}')
+                return default_values
+
         match axis:
             case 'x':
-                A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace]).T
+                A, U, S = np.array([gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace)]).T
                 return U + np.expand_dims(sigma, -1) * S if self.yscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
             case 'y':
-                A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace.T]).T
+                A, U, S = np.array([gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace.T)]).T
                 return U + np.expand_dims(sigma, -1) * S if self.xscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
 
-    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, *args, **kwargs):
-        fit = self.fitting(axis, p0, bounds, sigma)
+    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, default_values: list[float] = [np.nan, np.nan, np.nan], *args, **kwargs) -> tuple[np.ndarray, list[matplotlib.lines.Line2D]]:
+        """
+        Args:
+            axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
+            p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+            sigma (float|list, optional): standard derivative
+            default_values (list, optional): values used when least-square minimization failed
+
+        Returns:
+            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
+            list: matplotlib Line2D objects
+        """
+        fit = self.fitting(axis, p0, bounds, sigma, default_values)
         match axis:
             case 'x':
-                return self.ax.plot(self.x, fit.T, *args, **kwargs)
+                return fit, self.ax.plot(self.x, fit.T, *args, **kwargs)
             case 'y':
-                return self.ax.plot(self.y, fit.T, *args, **kwargs)
+                return fit, self.ax.plot(self.y, fit.T, *args, **kwargs)
