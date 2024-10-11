@@ -1,6 +1,4 @@
-import argparse
 import atexit
-import copy
 import gc
 import json
 import logging
@@ -14,13 +12,11 @@ import tkinter.filedialog
 import tkinter.messagebox
 from tkinter import ttk
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yaml
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
-from matplotlib.colors import LinearSegmentedColormap
 from watchdog.events import FileCreatedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -92,14 +88,17 @@ class Main:
         self.rename_entry.grab_release()
 
     def close_tab(self, *args):
-        tab = self.tabcontrol.nametowidget(self.tabcontrol.select())
-        gui = tab.gui_object
-        gui.export_prompt.window.destroy()
-        gui.window.destroy()
-        tab.destroy()
-        delattr(tab, 'gui_object')
-        plt.close('all')
-        gc.collect()
+        try:
+            tab = self.tabcontrol.nametowidget(self.tabcontrol.select())
+            gui = tab.gui_object
+            gui.export_prompt.window.destroy()
+            gui.window.destroy()
+            tab.destroy()
+            delattr(tab, 'gui_object')
+            plt.close('all')
+            gc.collect()
+        except:
+            return
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
@@ -1166,9 +1165,11 @@ class Logging_GUI(logging.Handler):
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # PyInstaller
+    import matplotlib
     matplotlib.use('TkAgg')
     plt.ioff()
     root = tk.Tk()
+    import argparse
     parser = argparse.ArgumentParser(description='Run GUI')
     parser.add_argument('--debug', action='store_true')
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
