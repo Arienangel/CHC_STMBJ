@@ -1,18 +1,19 @@
 import concurrent.futures
 import glob
+import logging
 import os
 from typing import Literal, Union
 from zipfile import ZipFile
 
-import datatable as dt
 import matplotlib.colors
+import matplotlib.lines
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.interpolate
 import scipy.optimize
 import scipy.signal
-from nptdms import TdmsFile
 from scipy.constants import physical_constants
 
 cmap = matplotlib.colors.LinearSegmentedColormap('Cmap',
@@ -23,7 +24,7 @@ cmap = matplotlib.colors.LinearSegmentedColormap('Cmap',
                                                  },
                                                  N=256)
 
-G0, *_ = physical_constants['conductance quantum']
+G0 = physical_constants['conductance quantum'][0]
 
 
 def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
@@ -92,13 +93,16 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers: int 
         elif path.endswith('.npy'):
             return np.load(path)
         elif path.endswith('tdms'):
+            from nptdms import TdmsFile
             with TdmsFile.read(path) as f:
                 return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                logging.debug(f'Use {max_workers} processes in load_data')
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
         elif os.path.isdir(path):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                logging.debug(f'Use {max_workers} processes in load_data')
                 return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
         return np.concatenate(list(map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
@@ -109,12 +113,23 @@ def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False,
     if folder:
         path = folder
         files = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
-        return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
+        try:
+            import datatable as dt
+            return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
+        except ImportError:
+            logging.warning('Module datatable was not found. Use pandas instead.')
+            return np.concatenate(list(map(lambda f: pd.read_csv(f, sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze(), files)), axis=-1)
     elif zipfile:
         path = zipfile
         with ZipFile(path) as zf:
             files = list(map(zf.read, filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())))
-            return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
+            try:
+                import datatable as dt
+                return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
+            except ImportError:
+                logging.warning('Module datatable was not found. Use pandas instead.')
+                import io
+                return np.concatenate(list(map(lambda f: pd.read_csv(io.BytesIO(f), sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze(), files)), axis=-1)
 
 
 def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, max_workers=None, **kwargs) -> pd.DataFrame:
@@ -133,13 +148,16 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
         if path.endswith('.txt'):
             return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
         elif path.endswith('.tdms'):
+            from nptdms import TdmsFile
             with TdmsFile.read(path) as f:
                 return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                logging.debug(f'Use {max_workers} processes in load_data_with_metadata')
                 return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
         elif os.path.isdir(path):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                logging.debug(f'Use {max_workers} processes in load_data_with_metadata')
                 return executor.submit(_load_data_with_metadata, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
         return pd.concat(map(lambda path: load_data_with_metadata(path, recursive, max_workers, **kwargs), path), axis=0)
@@ -151,7 +169,12 @@ def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive:
         path = folder
         df = pd.DataFrame()
         df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
-        df['data'] = df['path'].apply(lambda f: dt.fread(f).to_numpy().T.squeeze())
+        try:
+            import datatable as dt
+            df['data'] = df['path'].apply(lambda f: dt.fread(f).to_numpy().T.squeeze())
+        except ImportError:
+            logging.warning('Module datatable was not found. Use pandas instead.')
+            df['data'] = df['path'].apply(lambda f: pd.read_csv(f, sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze())
         df['time'] = df['path'].apply(os.path.getmtime)
         return df[['path', 'data', 'time']]
     elif zipfile:
@@ -159,7 +182,13 @@ def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive:
         df = pd.DataFrame()
         with ZipFile(path) as zf:
             df['path'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
-            df['data'] = df['path'].apply(lambda f: dt.fread(zf.read(f)).to_numpy().T.squeeze())
+            try:
+                import datatable as dt
+                df['data'] = df['path'].apply(lambda f: dt.fread(zf.read(f)).to_numpy().T.squeeze())
+            except ImportError:
+                logging.warning('Module datatable was not found. Use pandas instead.')
+                import io
+                df['data'] = df['path'].apply(lambda f: pd.read_csv(io.BytesIO(zf.read(f)), sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze())
             df['time'] = df['path'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
         return df[['path', 'data', 'time']]
 
@@ -228,16 +257,28 @@ class Hist1D:
             bounds (list, optional): Lower and upper bounds on parameters
 
         Returns:
-            tuple[ndarray, ndarray]: return fitting values and its parameters
+            ndarray: fitting results
+            ndarray: fitting parameters (A, U, S)
         """
         f = np.where((self.x > min(x_range)) & (self.x < max(x_range)))
         x = self.x if self.xscale == 'linear' else np.log10(self.x)
         param = scipy.optimize.curve_fit(multi_gaussian, x[f], self.height_per_trace[f], p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0]
         return multi_gaussian(x, *param), param
 
-    def plot_fitting(self, x_range: list = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs):
-        fit, param = self.fitting(x_range, p0, bounds)
-        return self.ax.plot(self.x, fit, *args, **kwargs), param
+    def plot_fitting(self, x_range: list = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs) -> tuple:
+        """
+        Args:
+            x_range (list, optional): x range used to fit with height_per_trace, always in linear scale
+            p0 (list, optional): Initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+
+        Returns:
+            ndarray: fitting results
+            ndarray: fitting parameters (A, U, S)
+            list: matplotlib Line2D objects
+        """
+        fit, params = self.fitting(x_range, p0, bounds)
+        return fit, params, self.ax.plot(self.x, fit, *args, **kwargs)
 
 
 class Hist2D:
@@ -320,27 +361,48 @@ class Hist2D:
             cmap = matplotlib.colors.LinearSegmentedColormap('Cmap', segmentdata=cmap, N=256)
         self.plot.set_cmap(cmap)
 
-    def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0):
+    def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float  = 0, default_values: list = [np.nan, np.nan, np.nan]) -> np.ndarray:
         """
         Args:
             axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
             p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
             bounds (list, optional): Lower and upper bounds on parameters
             sigma (float|list, optional): standard derivative
+            default_values (list, optional): values used when least-square minimization failed
 
         Returns:
-            ndarray: return fitting values for each x or y value
+            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
         """
+
+        def gaussian_fit(label, xdata, ydata, p0, bounds):
+            try:
+                return scipy.optimize.curve_fit(gaussian, xdata, ydata, p0=p0, bounds=bounds)[0]
+            except Exception as E:
+                logging.warning(f'Least-square minimization failed at {axis}={label}')
+                return default_values
+
         if axis == 'x':
-            A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace]).T
+            A, U, S = np.array([gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace)]).T
             return U + np.expand_dims(sigma, -1) * S if self.yscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
         elif axis == 'y':
-            A, U, S = np.array([scipy.optimize.curve_fit(gaussian, self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0] for z in self.height_per_trace.T]).T
+            A, U, S = np.array([gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace.T)]).T
             return U + np.expand_dims(sigma, -1) * S if self.xscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
 
-    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, *args, **kwargs):
-        fit = self.fitting(axis, p0, bounds, sigma)
+    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, default_values: list = [np.nan, np.nan, np.nan], *args, **kwargs) -> tuple:
+        """
+        Args:
+            axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
+            p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
+            bounds (list, optional): Lower and upper bounds on parameters
+            sigma (float|list, optional): standard derivative
+            default_values (list, optional): values used when least-square minimization failed
+
+        Returns:
+            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
+            list: matplotlib Line2D objects
+        """
+        fit = self.fitting(axis, p0, bounds, sigma, default_values)
         if axis == 'x':
-            return self.ax.plot(self.x, fit.T, *args, **kwargs)
+            return fit, self.ax.plot(self.x, fit.T, *args, **kwargs)
         elif axis == 'y':
-            return self.ax.plot(self.y, fit.T, *args, **kwargs)
+            return fit, self.ax.plot(self.y, fit.T, *args, **kwargs)

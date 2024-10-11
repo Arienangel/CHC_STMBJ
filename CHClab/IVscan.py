@@ -130,13 +130,36 @@ class Hist_IV(Hist2D):
 
     def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
         """
-        Add data into 2D histogram (GV)
+        Add data into 2D histogram (IV)
 
         Args:
             I (ndarray): 2D I array with shape (trace, length)
             V (ndarray): 2D Ebias array with shape (trace, length)
         """
         super().add_data(V, np.abs(I), **kwargs)
+
+    def add_contour_G(self, levels: np.ndarray = np.logspace(-6, -1, 6), colors='k', linestyles: Literal['solid', 'dashed', 'dashdot', 'dotted'] = 'dotted', fontsize=8, **kwargs):
+        """
+        Add conductance contour into 2D histogram (IV)
+
+        Args:
+            levels (ndarray)
+            linestyles (str, optional): 'solid', 'dashed', 'dashdot', 'dotted'
+            colors (str, optional)
+            fontsize (str, optional)
+        """
+        x, y = np.meshgrid(self.x, self.y)
+        z = np.abs(y / x / G0)
+        if self.yscale == 'log':
+            c = self.ax.contour(x, y, z, levels=levels, colors=colors, linestyles=linestyles)
+            fmt = matplotlib.ticker.LogFormatterMathtext()
+            fmt.create_dummy_axis()
+            self.ax.clabel(c, c.levels, fmt=fmt, fontsize=fontsize, **kwargs)
+        else:
+            c = self.ax.contour(x, y, z, levels=levels, colors=colors, linestyles=linestyles)
+            fmt = matplotlib.ticker.ScalarFormatter()
+            fmt.create_dummy_axis()
+            self.ax.clabel(c, c.levels, fmt=fmt, fontsize=fontsize, **kwargs)
 
 
 class Hist_IVt(Hist2D):
