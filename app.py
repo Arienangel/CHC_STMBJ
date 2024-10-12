@@ -101,7 +101,7 @@ class Main:
 
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
-        self.window.update()
+        self.window.update_idletasks()
 
 
 def _set_directory(var: tk.StringVar, value: str):
@@ -307,20 +307,18 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
                 self.canvas_2DCH.draw()
             self.colorbar_apply()
+            self.window.update_idletasks()
             self.status_traces.config(text=0)
             self.time_init = None
-            if isinstance(path, list):
-                self.add_data(path) # fix win7 freeze
-                return
-            else:
-                self.add_data(path)
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
-                self.observer.start()
-                logger.info(f'Start observer: {path}')
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
+            threading.Thread(target=self.add_data, args=(path, )).start()
+            if isinstance(path, list): return
+            self.observer = Observer()
+            self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
+            self.observer.start()
+            logger.info(f'Start observer: {path}')
+            atexit.register(self.observer.stop)
+            self.run_button.config(text='Stop', bg='red')
+            self.is_run = True
         else:
             self.run_button.config(text='Run', bg='lime')
             self.is_run = False
@@ -817,21 +815,20 @@ class IVscan_GUI(FileSystemEventHandler):
                 self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
                 self.canvas_IVt.draw()
             self.colorbar_apply()
+            self.window.update_idletasks()
             if self.run_config['data_type'] == 'raw': self.pending = list()
             self.status_cycles.config(text=0)
             self.status_traces.config(text=0)
-            if isinstance(path, list):
-                self.add_data(path) # fix win7 freeze
-                return
-            else:
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
-                self.observer.start()
-                logger.info(f'Start observer: {path}')
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
-                self.add_data(path)
+            self._lock = threading.RLock()
+            threading.Thread(target=self.add_data, args=(path, )).start()
+            if isinstance(path, list): return
+            self.observer = Observer()
+            self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
+            self.observer.start()
+            logger.info(f'Start observer: {path}')
+            atexit.register(self.observer.stop)
+            self.run_button.config(text='Stop', bg='red')
+            self.is_run = True
         else:
             self.run_button.config(text='Run', bg='lime')
             self.is_run = False
@@ -860,9 +857,10 @@ class IVscan_GUI(FileSystemEventHandler):
         try:
             logger.debug(f'Add data: {path}')
             if self.run_config['data_type'] == 'raw':
-                self.pending.append(IVscan.load_data(path, max_workers=GUI.CPU_threads.get())[::-1])
-                if len(self.pending) > self.run_config['num_files']: del self.pending[:-self.run_config['num_files']]
-                IV_raw = np.concatenate(self.pending, axis=1)
+                with self._lock:
+                    self.pending.append(IVscan.load_data(path, max_workers=GUI.CPU_threads.get())[::-1])
+                    if len(self.pending) > self.run_config['num_files']: del self.pending[:-self.run_config['num_files']]
+                    IV_raw = np.concatenate(self.pending, axis=1)
                 I_full, V_full = IVscan.extract_data(IV_raw,
                                                      upper=self.run_config['V_upper'],
                                                      lower=self.run_config['V_lower'],
@@ -1145,15 +1143,36 @@ class Logging_GUI(logging.Handler):
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.title('Log')
         self.window.resizable(True, True)
-        self.widget = tk.Text(self.window, height=30, width=120)
-        self.widget.pack(side='top', fill='both', expand=True)
-        self.widget.config(state='disabled')
+        self.logtext = tk.Text(self.window, height=30, width=120)
+        self.logtext.pack(side='top', fill='both', expand=True)
+        self.logtext.config(state='disabled')
+        buttomframe = tk.Frame(self.window)
+        buttomframe.pack(side='bottom')
+        tk.OptionMenu(buttomframe, loglevel, *['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], command=self.set_level).pack(side='left')
+        tk.Button(buttomframe, text='Save', command=self.save).pack(side='left')
+        tk.Button(buttomframe, text='Clear', command=self.clear).pack(side='left')
 
     def emit(self, record):
-        self.widget.config(state='normal')
-        self.widget.insert(tk.END, self.format(record) + '\n')
-        self.widget.see(tk.END)
-        self.widget.config(state='disabled')
+        self.logtext.config(state='normal')
+        self.logtext.insert(tk.END, self.format(record) + '\n')
+        self.logtext.see(tk.END)
+        self.logtext.config(state='disabled')
+
+    def set_level(self, level):
+        logger.setLevel(level)
+
+    def save(self):
+        import datetime
+        path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{datetime.datetime.now().strftime("%Y%m%dT%H%M%S")}.log', defaultextension='.log', filetypes=[('Text Files', '*.log'), ('All Files', '*.*')])
+        if path:
+            text = self.logtext.get('0.0', 'end').strip()
+            with open(path, mode='w', encoding='utf-8') as f:
+                f.write(text)
+
+    def clear(self):
+        self.logtext.config(state='normal')
+        self.logtext.delete('1.0', 'end')
+        self.logtext.config(state='disabled')
 
     def show(self):
         self.window.deiconify()
@@ -1170,12 +1189,13 @@ if __name__ == '__main__':
     root = tk.Tk()
     import argparse
     parser = argparse.ArgumentParser(description='Run GUI')
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--level', type=str, default='WARNING')
+    loglevel = tk.StringVar(root, value=parser.parse_args().level.upper())
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
     handler = Logging_GUI()
     handler.setFormatter(formatter)
     logger = logging.getLogger('App')
     logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG if parser.parse_args().debug else logging.WARNING)
+    logger.setLevel(loglevel.get())
     GUI = Main()
     tk.mainloop()
