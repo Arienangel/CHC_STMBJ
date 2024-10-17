@@ -600,6 +600,7 @@ class IVscan_GUI(FileSystemEventHandler):
         self.V_upper = tk.DoubleVar(value=1.45)
         self.V_lower = tk.DoubleVar(value=-1.45)
         self.length = tk.IntVar(value=1200)
+        self.tolerance = tk.IntVar(value=0)
         self.offset0 = tk.IntVar(value=1200)
         self.offset1 = tk.IntVar(value=1200)
         self.extract_method = tk.StringVar(value='height')
@@ -609,7 +610,11 @@ class IVscan_GUI(FileSystemEventHandler):
         tk.Entry(frame_Vlimit, textvariable=self.V_upper, justify='center', width=10).pack(side='left')
         tk.Entry(frame_Vlimit, textvariable=self.V_lower, justify='center', width=10).pack(side='left')
         tk.Label(self.frame_config, text='Length: ').grid(row=3, column=2)
-        tk.Entry(self.frame_config, textvariable=self.length, justify='center').grid(row=3, column=3)
+        frame_length = tk.Frame(self.frame_config)
+        frame_length.grid(row=3, column=3)
+        tk.Entry(frame_length, textvariable=self.length, justify='center', width=8).pack(side='left')
+        tk.Label(frame_length, text='±').pack(side='left')
+        tk.Entry(frame_length, textvariable=self.tolerance, justify='center', width=8).pack(side='left')
         tk.Label(self.frame_config, text='Offset: ').grid(row=3, column=4)
         frame_offset = tk.Frame(self.frame_config)
         frame_offset.grid(row=3, column=5)
@@ -764,6 +769,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     "V_upper": self.V_upper.get(),
                     "V_lower": self.V_lower.get(),
                     "length_segment": self.length.get(),
+                    "tolerance": self.tolerance.get(),
                     "offset": (self.offset0.get(), self.offset1.get()),
                     'is_noise_remove': self.is_noise_remove.get(),
                     'V0': self.V0.get(),
@@ -874,7 +880,8 @@ class IVscan_GUI(FileSystemEventHandler):
                                                          num_segment=self.run_config['num_segment'],
                                                          offset=self.run_config['offset'],
                                                          units=self.run_config['units'],
-                                                         mode=self.run_config['extract_method'])
+                                                         mode=self.run_config['extract_method'],
+                                                         tolerance=self.run_config['tolerance'])
                     if I_full.size == 0:
                         self.status_last_file.config(bg='lime')
                         return
@@ -883,7 +890,15 @@ class IVscan_GUI(FileSystemEventHandler):
                         if ind.size: self.pending = [self.pending[-1][:, ind[-1]:]]
                         else: self.pending = []
                         if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
-                            I, V = IVscan.extract_data(IV_raw, upper=self.run_config['V_upper'], lower=self.run_config['V_lower'], length_segment=self.run_config['length_segment'], num_segment=1, offset=[0, 0], units=self.run_config['units'], mode=self.run_config['extract_method'])
+                            I, V = IVscan.extract_data(IV_raw,
+                                                       upper=self.run_config['V_upper'],
+                                                       lower=self.run_config['V_lower'],
+                                                       length_segment=self.run_config['length_segment'],
+                                                       num_segment=1,
+                                                       offset=[0, 0],
+                                                       units=self.run_config['units'],
+                                                       mode=self.run_config['extract_method'],
+                                                       tolerance=self.run_config['tolerance'])
                 case 'cut':
                     df = IVscan.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())['data']
                     length = df.apply(lambda x: x.shape[-1])
@@ -944,6 +959,7 @@ class IVscan_GUI(FileSystemEventHandler):
             'V upper': self.V_upper,
             'V lower': self.V_lower,
             'Length': self.length,
+            'Tolerance': self.tolerance,
             'Offset0': self.offset0,
             'Offset1': self.offset1,
             'I limit': self.I_limit,
@@ -1097,6 +1113,7 @@ class IVscan_export_prompt:
                     'V upper': self.root.V_upper.get(),
                     'V lower': self.root.V_lower.get(),
                     'Length': self.root.length.get(),
+                    'Tolerance': self.root.tolerance.get(),
                     'Offset0': self.root.offset0.get(),
                     'Offset1': self.root.offset1.get(),
                     'I limit': self.root.I_limit.get(),

@@ -1,7 +1,7 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lower: float = -1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], mode: Literal['gradient', 'height'] = 'gradient', **kwargs):
+def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lower: float = -1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], mode: Literal['gradient', 'height'] = 'height', tolerance: int = 0, **kwargs):
     '''
     Extract traces from raw_data
 
@@ -13,6 +13,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
         offset (list, optional): length from first point to first peak and last point to last peak
         units (list, optional): default: (μA, V)
         mode (str, optional): method used to find peaks
+        tolerance (int, optional): tolerance of length_segment (length_segment-tolerance~length_segment+tolerance)
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
@@ -25,20 +26,22 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
             peaks = scipy.signal.find_peaks(np.abs(np.gradient(np.gradient(V))), distance=length_segment / 4)[0]
         case 'height':
             peaks = np.concatenate([scipy.signal.find_peaks(V, height=upper, distance=length_segment / 4)[0], scipy.signal.find_peaks(-V, height=-lower, distance=length_segment / 4)[0]])
-    start_seg = peaks[np.isin(peaks + length_segment, peaks)]
-    if start_seg.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
-    V_seg = np.stack([V[i:i + length_segment] for i in start_seg])
-    rm_idx = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])
-    start_seg = np.delete(start_seg, rm_idx)
-    if start_seg.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
-    end_seg = start_seg + length_segment
+    start_seg_index = peaks[np.isin(peaks + length_segment, (peaks + np.expand_dims(np.arange(-tolerance, tolerance + 1), -1)).ravel())]
+    if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
+    # segment
     if num_segment == 1:
-        return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg], axis=1)
+        V_seg = np.stack([V[i:i + length_segment] for i in start_seg_index])
+        rm_start_seg_index = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])  # remove non-monotonically increasing/decreasing voltage
+        start_seg_index = np.delete(start_seg_index, rm_start_seg_index)
+        if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
+        return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg_index], axis=1)
+    # fullcycle
     else:
-        start_full = peaks[np.isin(peaks + length_segment * num_segment, peaks)]
-        is_full = (np.where(np.isin(np.expand_dims(start_full, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0), end_seg), 1, 0).sum(axis=1) == num_segment) & (start_full + length_segment * num_segment + offset[1] < I.size) & (start_full - offset[0] >= 0)
-        if start_full[is_full].size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
-        return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full[is_full]], axis=1)
+        start_full_index = start_seg_index[np.isin(start_seg_index + length_segment * num_segment, (peaks + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel())]
+        is_start_full_index = (np.isin(np.expand_dims(start_full_index, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0), (start_seg_index + length_segment + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel()).sum(axis=1)
+                               == num_segment) & (start_full_index + length_segment * num_segment + offset[1] < I.size) & (start_full_index - offset[0] >= 0)
+        if start_full_index[is_start_full_index].size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
+        return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full_index[is_start_full_index]], axis=1)
 
 
 def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, I_limit: float = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
