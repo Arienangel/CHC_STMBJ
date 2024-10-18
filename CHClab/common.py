@@ -97,15 +97,15 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers: int 
             with TdmsFile.read(path) as f:
                 return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
         elif path.endswith('zip'):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data')
+            with concurrent.futures.ProcessPoolExecutor(1) as executor:
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
         elif os.path.isdir(path):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data')
+            with concurrent.futures.ProcessPoolExecutor(1) as executor:
                 return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
-        return np.concatenate(list(map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            logging.debug(f'Use {max_workers} workers in load_data')
+            return np.concatenate(list(executor.map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
 
 
 def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> np.ndarray:
