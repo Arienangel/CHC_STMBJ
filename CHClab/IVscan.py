@@ -1,25 +1,40 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lower: float = -1.45, length_segment: int = 1200, num_segment: int = 1, offset: list = [0, 0], units: list = [1e-6, 1], mode: Literal['gradient', 'height'] = 'height', tolerance: int = 0, **kwargs):
+def extract_data(raw_data: Union[np.ndarray, str, list] = None,
+                 upper: float = 1.45,
+                 lower: float = -1.45,
+                 length_segment: int = 1200,
+                 num_segment: int = 1,
+                 offset: list = [0, 0],
+                 units: list = [1e-6, 1],
+                 mode: Literal['gradient', 'height'] = 'height',
+                 tolerance: int = 0,
+                 *,
+                 I_raw: np.array = None,
+                 V_raw: np.array = None,
+                 **kwargs):
     '''
     Extract traces from raw_data
 
     Args:
         raw_data (ndarray | str): 2D array (I, V) contains raw data, directory of files, zip file, or txt file
-        height (float, optional): peak height of E bias
+        height (float, optional): peak height of voltage
         length_segment (int, optional): length of one segment
         num_segment (int, oprional):numbber of segments
         offset (list, optional): length from first point to first peak and last point to last peak
         units (list, optional): default: (μA, V)
         mode (str, optional): method used to find peaks
         tolerance (int, optional): tolerance of length_segment (length_segment-tolerance~length_segment+tolerance)
+        I_raw (ndarray, optional): raw current in 1D array
+        V_raw (ndarray, optional): raw voltage in 1D array
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
     '''
-    if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
+    if raw_data is None: raw_data = np.stack([I_raw, V_raw])
+    elif not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)[::-1]
     I, V = raw_data * np.expand_dims(units, 1)
     match mode:
         case 'gradient':
@@ -28,12 +43,12 @@ def extract_data(raw_data: Union[np.ndarray, str, list], upper: float = 1.45, lo
             peaks = np.concatenate([scipy.signal.find_peaks(V, height=upper, distance=length_segment / 4)[0], scipy.signal.find_peaks(-V, height=-lower, distance=length_segment / 4)[0]])
     start_seg_index = peaks[np.isin(peaks + length_segment, (peaks + np.expand_dims(np.arange(-tolerance, tolerance + 1), -1)).ravel())]
     if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
+    V_seg = np.stack([V[i:i + length_segment] for i in start_seg_index])
+    rm_start_seg_index = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])  # remove non-monotonically increasing/decreasing voltage
+    start_seg_index = np.delete(start_seg_index, rm_start_seg_index)
+    if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     # segment
     if num_segment == 1:
-        V_seg = np.stack([V[i:i + length_segment] for i in start_seg_index])
-        rm_start_seg_index = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])  # remove non-monotonically increasing/decreasing voltage
-        start_seg_index = np.delete(start_seg_index, rm_start_seg_index)
-        if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
         return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg_index], axis=1)
     # fullcycle
     else:
@@ -50,13 +65,13 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, 
 
     Args:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
         V0, dV (float, optional): Remove traces that I.min() is not between V0±dV
         I_limit (float, optional): Remove traces that I.max() is greater than I_limit
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
     '''
     if dV:
         zero_point = np.diagonal(V[:, np.abs(I).argmin(axis=1)])
@@ -74,12 +89,12 @@ def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple[np.n
 
     Args:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
         V0 (float): set I min to this V
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
     '''
     zero_point = np.diagonal(V[:, np.abs(I).argmin(axis=1)])
     return I, V - np.expand_dims(zero_point, axis=1) + V0
@@ -87,15 +102,15 @@ def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple[np.n
 
 def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
     '''
-    Split E bias scanning direction
+    Split voltage scanning direction
 
     Args:
         I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): E bias (V) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
 
     Returns:
-        ascending (tuple):  tuple of current and ascending E bias
-        descending (tuple):  tuple of current and descending E bias
+        ascending (tuple):  tuple of current and ascending voltage
+        descending (tuple):  tuple of current and descending voltage
     '''
     filter = np.where((V[:, -1] - V[:, 0]) > 0, True, False)
     ascending = I[filter], V[filter]
@@ -111,7 +126,7 @@ class Hist_GV(Hist2D):
         self.ax.set_ylabel('Conductance ($G/G_0$)')
         self.colorbar.set_label('Count/trace')
 
-    def add_data(self, I: np.ndarray = None, V: np.ndarray = None, G: np.ndarray = None, **kwargs) -> None:
+    def add_data(self, I: np.ndarray = None, V: np.ndarray = None, *, G: np.ndarray = None, **kwargs) -> None:
         """
         Add data into 2D histogram (GV)
 

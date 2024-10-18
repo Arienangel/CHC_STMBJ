@@ -74,11 +74,6 @@ class Hist_G(Hist1D):
             G (ndarray): 2D array with shape (trace, length)
         """
         super().add_data(G, **kwargs)
-        '''peak, *_ = scipy.signal.find_peaks(height_per_trace, prominence=0.1)
-        peak_position = self.bins[peak], height_per_trace[peak]
-        self.ax.plot(*peak_position, 'xr')
-        for i, j in zip(*peak_position):
-            self.ax.annotate(f'{i:1.2E}', xy=(i, j+0.02), ha='center', fontsize=8)'''
 
 
 class Hist_GS(Hist2D):
@@ -134,14 +129,16 @@ class Hist_Gt(Hist2D):
         with np.errstate(invalid='ignore', divide='ignore'):
             return np.nan_to_num(np.divide(self.height, np.expand_dims(self.trace, axis=1)))
 
-    def add_data(self, t: np.ndarray, G: np.ndarray, set_clim: bool = True, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, t: np.ndarray = None, set_clim: bool = True, *, interval: float = 0.5, **kwargs) -> None:
         """
         Add data into 2D histogram
 
         Args:
-            t (ndarray): 1D time array with shape (trace)
             G (ndarray): 2D G array with shape (trace, length)
+            t (ndarray): 1D time array with shape (trace)
+            interval (float, optional): time interval between each trace
         """
+        if t is None: t = np.arange(G.shape[0]) * interval
         self.trace = self.trace + np.histogram(t, self.x_bins)[0]
         self.height = self.height + np.histogram2d(np.tile(t, (G.shape[1], 1)).T.ravel(), G.ravel(), (self.x_bins, self.y_bins))[0]
         height_per_trace = self.height_per_trace

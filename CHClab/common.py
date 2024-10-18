@@ -104,7 +104,7 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers: int 
                 return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
     elif isinstance(path, list):
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            logging.debug(f'Use {max_workers} workers in load_data')
+            logging.debug(f'Use {max_workers if max_workers else "max"} workers in load_data')
             return np.concatenate(list(executor.map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
 
 
@@ -237,7 +237,7 @@ class Hist1D:
             x (ndarray): 2D array with shape (trace, length)
             set_ylim (bool, optional): set largest y as y max
         """
-        self.trace = self.trace + x.shape[0]
+        self.trace = self.trace + x.shape[0] if x.ndim == 2 else self.trace + 1
         self.height = self.height + np.histogram(x, self.x_bins)[0]
         height_per_trace = self.height_per_trace
         self.plot.set_data(height_per_trace)

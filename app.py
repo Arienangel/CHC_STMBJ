@@ -380,7 +380,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.hist_GS.add_data(extracted)
                 self.canvas_GS.draw()
             if self.run_config['plot_hist_Gt']:
-                self.hist_Gt.add_data(time, extracted)
+                self.hist_Gt.add_data(extracted, time)
                 self.canvas_Gt.draw()
             if self.run_config['plot_2DCH']:
                 self.hist_2DCH.add_data(extracted)
