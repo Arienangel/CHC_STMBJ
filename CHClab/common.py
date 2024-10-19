@@ -5,6 +5,7 @@ import os
 from typing import Literal, Union
 from zipfile import ZipFile
 
+import matplotlib.axes
 import matplotlib.colors
 import matplotlib.lines
 import matplotlib.ticker
@@ -211,13 +212,14 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
         self.xscale = xscale
-        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        if fig: self.fig, self.ax = fig, ax
+        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
@@ -303,7 +305,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
@@ -311,7 +313,8 @@ class Hist2D:
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale
-        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        if fig: self.fig, self.ax = fig, ax
+        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)

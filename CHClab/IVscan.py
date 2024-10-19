@@ -73,6 +73,9 @@ def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, 
         I (ndarray): current (A) in 2D array (#traces, length)
         V (ndarray): voltage (V) in 2D array (#traces, length)
     '''
+    if V.ndim == 1:
+        I = np.expand_dims(I, 0)
+        V = np.expand_dims(V, 0)
     if dV:
         zero_point = np.diagonal(V[:, np.abs(I).argmin(axis=1)])
         f = np.abs(zero_point - V0) < dV
@@ -96,6 +99,9 @@ def zeroing(I: np.ndarray, V: np.ndarray, V0: float = 0, **kwargs) -> tuple[np.n
         I (ndarray): current (A) in 2D array (#traces, length)
         V (ndarray): voltage (V) in 2D array (#traces, length)
     '''
+    if V.ndim == 1:
+        I = np.expand_dims(I, 0)
+        V = np.expand_dims(V, 0)
     zero_point = np.diagonal(V[:, np.abs(I).argmin(axis=1)])
     return I, V - np.expand_dims(zero_point, axis=1) + V0
 
@@ -112,6 +118,9 @@ def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple[tuple[
         ascending (tuple):  tuple of current and ascending voltage
         descending (tuple):  tuple of current and descending voltage
     '''
+    if V.ndim == 1:
+        I = np.expand_dims(I, 0)
+        V = np.expand_dims(V, 0)
     filter = np.where((V[:, -1] - V[:, 0]) > 0, True, False)
     ascending = I[filter], V[filter]
     descending = I[~filter], V[~filter]

@@ -43,6 +43,7 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
     Returns:
         X (ndarray): 2D X array with shape (trace, length)
     """
+    if G.ndim == 1: G = np.expand_dims(G, 0)
     is_pull = G[:, 0] > G[:, -1]
     _, X = np.mgrid[:G.shape[0], :G.shape[-1]]
     row, col = np.where(((G[:, :-1] > zero_point) & (G[:, 1:] < zero_point) & np.expand_dims(is_pull, axis=-1)) | ((G[:, :-1] < zero_point) & (G[:, 1:] > zero_point) & np.expand_dims(~is_pull, axis=-1)))
