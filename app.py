@@ -234,10 +234,10 @@ class STM_bj_GUI(FileSystemEventHandler):
                     cmap = json.loads(colorbar_conf)
                     if self.run_config['plot_hist_GS']:
                         self.hist_GS.set_cmap(cmap=cmap)
-                        self.canvas_GS.draw()
+                        self.canvas_GS.draw_idle()
                     if self.run_config['plot_hist_Gt']:
                         self.hist_Gt.set_cmap(cmap=cmap)
-                        self.canvas_Gt.draw()
+                        self.canvas_Gt.draw_idle()
             except Exception as E:
                 return
             finally:
@@ -285,8 +285,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figure, pack_toolbar=False)
                     self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
                     self.autoscale_G = tk.BooleanVar(value=True)
-                    tk.Checkbutton(self.frame_figure, variable=self.autoscale_G, text="Autoscale").grid(row=1, column=4, sticky='w')
-                    self.canvas_G.draw()
+                    tk.Checkbutton(self.frame_figure, variable=self.autoscale_G, text="Autoscale").grid(row=2, column=0, sticky='w')
+                    self.canvas_G.draw_idle()
                 # hist GS
                 if self.run_config['plot_hist_GS']:
                     self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
@@ -294,7 +294,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figure, pack_toolbar=False)
                     self.navtool_GS.grid(row=1, column=5, columnspan=4, sticky='w')
-                    self.canvas_GS.draw()
+                    self.canvas_GS.draw_idle()
                 # hist Gt
                 if (self.is_raw.get() == 'raw') & self.run_config['plot_hist_Gt']:
                     self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
@@ -302,7 +302,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figure, pack_toolbar=False)
                     self.navtool_Gt.grid(row=1, column=10, columnspan=4, sticky='w')
-                    self.canvas_Gt.draw()
+                    self.canvas_Gt.draw_idle()
                 # hist 2DCH
                 if self.run_config['plot_2DCH']:
                     self.hist_2DCH = STM_bj.Hist_Correlation([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
@@ -310,7 +310,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                     self.canvas_2DCH.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
                     self.navtool_2DCH = NavigationToolbar2Tk(self.canvas_2DCH, self.frame_figure, pack_toolbar=False)
                     self.navtool_2DCH.grid(row=1, column=15, columnspan=4, sticky='w')
-                    self.canvas_2DCH.draw()
+                    self.canvas_2DCH.draw_idle()
                 # Trace GS
                 if self.run_config['plot_hist_GS']:
 
@@ -321,7 +321,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                                 if -self.G.shape[0] <= trace < self.G.shape[0]:
                                     if self.current_lines_GS: self.current_lines_GS.remove()
                                     self.current_lines_GS = self.hist_GS.ax.plot(self.X[trace], self.G[trace], color='k')[0]
-                                    self.canvas_GS.draw()
+                                    self.canvas_GS.draw_idle()
                         elif action == 'next':
                             if -self.G.shape[0] <= trace + 1 < self.G.shape[0]:
                                 self.current_trace_GS.set(trace + 1)
@@ -330,14 +330,14 @@ class STM_bj_GUI(FileSystemEventHandler):
                                 self.current_trace_GS.set(trace - 1)
                         elif action == 'clear':
                             if self.current_lines_GS: self.current_lines_GS.remove()
-                            self.canvas_GS.draw()
+                            self.canvas_GS.draw_idle()
 
                     self.plot_trace_GS = tk.BooleanVar(value=False)
                     self.current_trace_GS = tk.IntVar(value=-1)
                     self.current_lines_GS = None
                     frame_trace_GS = tk.Frame(self.frame_figure)
-                    frame_trace_GS.grid(row=1, column=9, sticky='w')
-                    tk.Checkbutton(frame_trace_GS, variable=self.plot_trace_GS).pack(side='left', anchor='w')
+                    frame_trace_GS.grid(row=2, column=5, sticky='w')
+                    tk.Checkbutton(frame_trace_GS, text="Trace: ", variable=self.plot_trace_GS).pack(side='left', anchor='w')
                     tk.Button(frame_trace_GS, text='<', command=lambda: show_trace_GS('prev')).pack(side='left', anchor='w')
                     current_trace_GS_entry = tk.Entry(frame_trace_GS, textvariable=self.current_trace_GS, justify='center', width=8)
                     current_trace_GS_entry.pack(side='left', anchor='w')
@@ -416,19 +416,20 @@ class STM_bj_GUI(FileSystemEventHandler):
             self.X = np.vstack([self.X, X])
             if self.run_config['plot_hist_G']:
                 self.hist_G.add_data(G, set_ylim=self.autoscale_G.get())
-                self.canvas_G.draw()
+                self.canvas_G.draw_idle()
             if self.run_config['plot_hist_GS']:
                 self.hist_GS.add_data(G, X)
                 if self.current_trace_GS.get()<0: self.current_trace_GS.set(self.current_trace_GS.get())
-                self.canvas_GS.draw()
+                self.canvas_GS.draw_idle()
             if self.run_config['plot_hist_Gt']:
                 self.hist_Gt.add_data(G, time)
-                self.canvas_Gt.draw()
+                self.canvas_Gt.draw_idle()
             if self.run_config['plot_2DCH']:
                 self.hist_2DCH.add_data(G)
-                self.canvas_2DCH.draw()
+                self.canvas_2DCH.draw_idle()
             self.status_traces.config(text=self.G.shape[0])
         self.status_last_file.config(bg='lime')
+        self.window.update_idletasks()
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
@@ -784,13 +785,13 @@ class IVscan_GUI(FileSystemEventHandler):
                     cmap = json.loads(colorbar_conf)
                     if self.run_config['plot_hist_GV']:
                         self.hist_GV.set_cmap(cmap=cmap)
-                        self.canvas_GV.draw()
+                        self.canvas_GV.draw_idle()
                     if self.run_config['plot_hist_IV']:
                         self.hist_IV.set_cmap(cmap=cmap)
-                        self.canvas_IV.draw()
+                        self.canvas_IV.draw_idle()
                     if self.run_config['plot_hist_IVt']:
                         self.hist_IVt.set_cmap(cmap=cmap)
-                        self.canvas_IVt.draw()
+                        self.canvas_IVt.draw_idle()
             except Exception as E:
                 return
             finally:
@@ -851,7 +852,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
                     self.navtool_IV.grid(row=1, column=0, columnspan=4, sticky='w')
-                    self.canvas_IV.draw()
+                    self.canvas_IV.draw_idle()
                 #hist GV
                 if self.run_config['plot_hist_GV']:
                     self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
@@ -859,7 +860,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_GV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
                     self.navtool_GV.grid(row=1, column=5, columnspan=4, sticky='w')
-                    self.canvas_GV.draw()
+                    self.canvas_GV.draw_idle()
                 # hist IVt
                 if self.run_config['plot_hist_IVt']:
                     self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
@@ -868,7 +869,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
                     self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
-                    self.canvas_IVt.draw()
+                    self.canvas_IVt.draw_idle()
                 # # Trace IV/GV
                 if self.run_config['plot_hist_IV'] or self.run_config['plot_hist_GV']:
 
@@ -880,11 +881,11 @@ class IVscan_GUI(FileSystemEventHandler):
                                     if self.run_config['plot_hist_IV']:
                                         if self.current_lines_IV: self.current_lines_IV.remove()
                                         self.current_lines_IV = self.hist_IV.ax.plot(self.V[trace], np.abs(self.I[trace]), color='k')[0]
-                                        self.canvas_IV.draw()
+                                        self.canvas_IV.draw_idle()
                                     if self.run_config['plot_hist_GV']:
                                         if self.current_lines_GV: self.current_lines_GV.remove()
                                         self.current_lines_GV = self.hist_GV.ax.plot(self.V[trace], np.abs(IVscan.conductance(self.I[trace], self.V[trace])), color='k')[0]
-                                        self.canvas_GV.draw()
+                                        self.canvas_GV.draw_idle()
                         elif action == 'next':
                             if -self.V.shape[0] <= trace + 1 < self.V.shape[0]:
                                 self.current_trace_IV_GV.set(trace + 1)
@@ -894,18 +895,18 @@ class IVscan_GUI(FileSystemEventHandler):
                         elif action == 'clear':
                             if self.current_lines_IV:
                                 self.current_lines_IV.remove()
-                                self.canvas_IV.draw()
+                                self.canvas_IV.draw_idle()
                             if self.current_lines_GV:
                                 self.current_lines_GV.remove()
-                                self.canvas_GV.draw()
+                                self.canvas_GV.draw_idle()
 
                     self.plot_trace_IV_GV = tk.BooleanVar(value=False)
                     self.current_trace_IV_GV = tk.IntVar(value=-1)
                     self.current_lines_IV = None
                     self.current_lines_GV = None
                     frame_trace_IV = tk.Frame(self.frame_figure)
-                    frame_trace_IV.grid(row=1, column=4, sticky='w') if self.run_config['plot_hist_IV'] else frame_trace_IV.grid(row=1, column=9, sticky='w')
-                    tk.Checkbutton(frame_trace_IV, variable=self.plot_trace_IV_GV).pack(side='left', anchor='w')
+                    frame_trace_IV.grid(row=2, column=0, sticky='w') if self.run_config['plot_hist_IV'] else frame_trace_IV.grid(row=2, column=5, sticky='w')
+                    tk.Checkbutton(frame_trace_IV, text="Segment: ", variable=self.plot_trace_IV_GV).pack(side='left', anchor='w')
                     tk.Button(frame_trace_IV, text='<', command=lambda: show_trace_IV_GV('prev')).pack(side='left', anchor='w')
                     current_trace_IV_entry = tk.Entry(frame_trace_IV, textvariable=self.current_trace_IV_GV, justify='center', width=8)
                     current_trace_IV_entry.pack(side='left', anchor='w')
@@ -924,7 +925,7 @@ class IVscan_GUI(FileSystemEventHandler):
                                 if -self.V_full.shape[0] <= trace < self.V_full.shape[0]:
                                     if self.current_lines_It: self.current_lines_It.remove()
                                     self.current_lines_It = self.hist_IVt.ax.plot(np.arange(self.I_full.shape[1]) / self.hist_IVt.x_conversion, np.abs(self.I_full[trace]), color='k')[0]
-                                    self.canvas_IVt.draw()
+                                    self.canvas_IVt.draw_idle()
                         elif action == 'next':
                             if -self.V_full.shape[0] <= trace + 1 < self.V_full.shape[0]:
                                 self.current_trace_It.set(trace + 1)
@@ -933,14 +934,14 @@ class IVscan_GUI(FileSystemEventHandler):
                                 self.current_trace_It.set(trace - 1)
                         elif action == 'clear':
                             self.current_lines_It.remove()
-                            self.canvas_IVt.draw()
+                            self.canvas_IVt.draw_idle()
 
                     self.plot_trace_It = tk.BooleanVar(value=False)
                     self.current_trace_It = tk.IntVar(value=-1)
                     self.current_lines_It = None
                     frame_trace_It = tk.Frame(self.frame_figure)
-                    frame_trace_It.grid(row=1, column=14, sticky='w')
-                    tk.Checkbutton(frame_trace_It, variable=self.plot_trace_It).pack(side='left', anchor='w')
+                    frame_trace_It.grid(row=2, column=10, sticky='w')
+                    tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It).pack(side='left', anchor='w')
                     tk.Button(frame_trace_It, text='<', command=lambda: show_trace_It('prev')).pack(side='left', anchor='w')
                     current_trace_It_entry = tk.Entry(frame_trace_It, textvariable=self.current_trace_It, justify='center', width=8)
                     current_trace_It_entry.pack(side='left', anchor='w')
@@ -1049,11 +1050,11 @@ class IVscan_GUI(FileSystemEventHandler):
                     I, V = IVscan.split_scan_direction(I, V)[1]
                 if self.run_config['plot_hist_IV']:
                     self.hist_IV.add_data(I, V)
-                    self.canvas_IV.draw()
+                    self.canvas_IV.draw_idle()
                 if self.run_config['plot_hist_GV']:
                     if self.run_config['mode'] == 'Ebias': self.hist_GV.add_data(I, V)
                     elif self.run_config['mode'] == 'Ewk': self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
-                    self.canvas_GV.draw()
+                    self.canvas_GV.draw_idle()
                 if self.current_trace_IV_GV.get()<0: self.current_trace_IV_GV.set(self.current_trace_IV_GV.get())
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
@@ -1061,11 +1062,12 @@ class IVscan_GUI(FileSystemEventHandler):
             if self.run_config['plot_hist_IVt']:
                 self.hist_IVt.add_data(I_full, V_full)
                 if self.current_trace_It.get()<0: self.current_trace_It.set(self.current_trace_It.get())
-                self.canvas_IVt.draw()
+                self.canvas_IVt.draw_idle()
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
                 self.status_cycles.config(text=self.I_full.shape[0])
             self.status_last_file.config(bg='lime')
+            self.window.update_idletasks()
 
     def import_setting(self):
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
