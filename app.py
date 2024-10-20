@@ -31,10 +31,10 @@ class Main:
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
-        self.option = tk.StringVar(value='Select')
+        self.option = tk.StringVar(self.window, value='Select')
         tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
-        self.CPU_threads = tk.IntVar(value=multiprocessing.cpu_count())
-        self.always_on_top = tk.BooleanVar(value=False)
+        self.CPU_threads = tk.IntVar(self.window, value=multiprocessing.cpu_count())
+        self.always_on_top = tk.BooleanVar(self.window, value=False)
         tk.Label(frame, text='CPU threads: ').pack(side='left')
         tk.Entry(frame, textvariable=self.CPU_threads, width=10, justify='center').pack(side='left')
         tk.Checkbutton(frame, variable=self.always_on_top, text="Always on top", command=self.on_top).pack(side='left')
@@ -88,16 +88,9 @@ class Main:
     def close_tab(self, *args):
         try:
             tab = self.tabcontrol.nametowidget(self.tabcontrol.select())
-            gui = tab.gui_object
-            try:
-                tab.gui_object.observer.stop()
-            except:
-                pass
-            gui.export_prompt.window.destroy()
-            gui.window.destroy()
+            tab.gui_object.cleanup('all')
             tab.destroy()
-            delattr(tab, 'gui_object')
-            plt.close('all')
+            del tab.gui_object
             gc.collect()
         except:
             return
@@ -129,17 +122,17 @@ class STM_bj_GUI:
         self.frame_config = tk.Frame(self.window)
         self.frame_config.pack(side='top', anchor='w')
         # row 0
-        self.directory_path = tk.StringVar()
+        self.directory_path = tk.StringVar(self.window)
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
         tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
-        self.extract_length = tk.IntVar(value=2000)
-        self.upper = tk.DoubleVar(value=3.2)
-        self.lower = tk.DoubleVar(value=1e-6)
-        self.is_raw = tk.StringVar(value='raw')
-        self.directory_recursive = tk.BooleanVar(value=False)
+        self.extract_length = tk.IntVar(self.window, value=2000)
+        self.upper = tk.DoubleVar(self.window, value=3.2)
+        self.lower = tk.DoubleVar(self.window, value=1e-6)
+        self.is_raw = tk.StringVar(self.window, value='raw')
+        self.directory_recursive = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_config, text='Length: ').grid(row=1, column=0)
         tk.Entry(self.frame_config, textvariable=self.extract_length, justify='center').grid(row=1, column=1)
         tk.Label(self.frame_config, text='G upper: ').grid(row=1, column=2)
@@ -149,9 +142,9 @@ class STM_bj_GUI:
         tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
         # row 2
-        self.zero_point = tk.DoubleVar(value=0.5)
-        self.points_per_nm = tk.DoubleVar(value=800)
-        self.direction = tk.StringVar(value='pull')
+        self.zero_point = tk.DoubleVar(self.window, value=0.5)
+        self.points_per_nm = tk.DoubleVar(self.window, value=800)
+        self.direction = tk.StringVar(self.window, value='pull')
         tk.Label(self.frame_config, text='X=0@G= ').grid(row=2, column=0)
         tk.Entry(self.frame_config, textvariable=self.zero_point, justify='center').grid(row=2, column=1)
         tk.Label(self.frame_config, text='Points/nm: ').grid(row=2, column=2)
@@ -159,10 +152,10 @@ class STM_bj_GUI:
         tk.Label(self.frame_config, text='Direction: ').grid(row=2, column=4)
         tk.OptionMenu(self.frame_config, self.direction, *['pull', 'crash', 'both']).grid(row=2, column=5)
         # row 3
-        self.G_min = tk.DoubleVar(value=0.00001)
-        self.G_max = tk.DoubleVar(value=3.16)
-        self.G_bins = tk.IntVar(value=550)
-        self.G_scale = tk.StringVar(value='log')
+        self.G_min = tk.DoubleVar(self.window, value=0.00001)
+        self.G_max = tk.DoubleVar(self.window, value=3.16)
+        self.G_bins = tk.IntVar(self.window, value=550)
+        self.G_scale = tk.StringVar(self.window, value='log')
         tk.Label(self.frame_config, text='G min: ').grid(row=3, column=0)
         tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=3, column=1)
         tk.Label(self.frame_config, text='G max: ').grid(row=3, column=2)
@@ -172,10 +165,10 @@ class STM_bj_GUI:
         tk.Label(self.frame_config, text='G scale: ').grid(row=3, column=6)
         tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=3, column=7)
         # row 4
-        self.X_min = tk.DoubleVar(value=-0.4)
-        self.X_max = tk.DoubleVar(value=0.6)
-        self.X_bins = tk.IntVar(value=1000)
-        self.X_scale = tk.StringVar(value='linear')
+        self.X_min = tk.DoubleVar(self.window, value=-0.4)
+        self.X_max = tk.DoubleVar(self.window, value=0.6)
+        self.X_bins = tk.IntVar(self.window, value=1000)
+        self.X_scale = tk.StringVar(self.window, value='linear')
         tk.Label(self.frame_config, text='X min: ').grid(row=4, column=0)
         tk.Entry(self.frame_config, textvariable=self.X_min, justify='center').grid(row=4, column=1)
         tk.Label(self.frame_config, text='X max: ').grid(row=4, column=2)
@@ -185,10 +178,10 @@ class STM_bj_GUI:
         tk.Label(self.frame_config, text='X scale: ').grid(row=4, column=6)
         tk.OptionMenu(self.frame_config, self.X_scale, *['log', 'linear']).grid(row=4, column=7)
         # row 5
-        self.t_min = tk.DoubleVar(value=0)
-        self.t_max = tk.DoubleVar(value=3600)
-        self.t_bin_size = tk.IntVar(value=30)
-        self.t_scale = tk.StringVar(value='linear')
+        self.t_min = tk.DoubleVar(self.window, value=0)
+        self.t_max = tk.DoubleVar(self.window, value=3600)
+        self.t_bin_size = tk.IntVar(self.window, value=30)
+        self.t_scale = tk.StringVar(self.window, value='linear')
         tk.Label(self.frame_config, text='t min: ').grid(row=5, column=0)
         tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=5, column=1)
         tk.Label(self.frame_config, text='t max: ').grid(row=5, column=2)
@@ -215,10 +208,10 @@ class STM_bj_GUI:
         # is_plot frame
         self.frame_is_plot = tk.Frame(self.window)
         self.frame_is_plot.pack(side='top', anchor='w')
-        self.plot_hist_G = tk.BooleanVar(value=True)
-        self.plot_hist_GS = tk.BooleanVar(value=True)
-        self.plot_hist_Gt = tk.BooleanVar(value=False)
-        self.plot_2DCH = tk.BooleanVar(value=False)
+        self.plot_hist_G = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_GS = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_Gt = tk.BooleanVar(self.window, value=False)
+        self.plot_2DCH = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram G', variable=self.plot_hist_G).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram GS', variable=self.plot_hist_GS).pack(side='left')
@@ -262,6 +255,7 @@ class STM_bj_GUI:
     def run(self):
         match self.is_run:
             case False:
+                self.cleanup('partial')
                 self.run_config = {
                     "length": self.extract_length.get(),
                     "upper": self.upper.get(),
@@ -298,7 +292,7 @@ class STM_bj_GUI:
                     self.canvas_G.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figure, pack_toolbar=False)
                     self.navtool_G.grid(row=1, column=0, columnspan=4, sticky='w')
-                    self.autoscale_G = tk.BooleanVar(value=True)
+                    self.autoscale_G = tk.BooleanVar(self.window, value=True)
                     tk.Checkbutton(self.frame_figure, variable=self.autoscale_G, text="Autoscale").grid(row=2, column=0, sticky='w')
                     self.canvas_G.draw_idle()
                 # hist GS
@@ -348,8 +342,8 @@ class STM_bj_GUI:
                                 self.current_lines_GS = None
                                 self.canvas_GS.draw_idle()
 
-                    self.plot_trace_GS = tk.BooleanVar(value=False)
-                    self.current_trace_GS = tk.IntVar(value=-1)
+                    self.plot_trace_GS = tk.BooleanVar(self.window, value=False)
+                    self.current_trace_GS = tk.IntVar(self.window, value=-1)
                     self.current_lines_GS = None
                     frame_trace_GS = tk.Frame(self.frame_figure)
                     frame_trace_GS.grid(row=2, column=5, sticky='w')
@@ -509,6 +503,35 @@ class STM_bj_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
+    def cleanup(self, catagory: Literal['partial', 'all']):
+        if hasattr(self, 'G'): del self.G
+        if hasattr(self, 'X'): del self.X
+        if hasattr(self, 'hist_G'):
+            self.hist_G.fig.clear()
+            plt.close(self.hist_G.fig)
+            del self.hist_G
+        if hasattr(self, 'hist_GS'):
+            self.hist_GS.fig.clear()
+            plt.close(self.hist_GS.fig)
+            del self.hist_GS
+        if hasattr(self, 'hist_Gt'):
+            self.hist_Gt.fig.clear()
+            plt.close(self.hist_Gt.fig)
+            del self.hist_Gt
+        if hasattr(self, 'hist_2DCH'):
+            self.hist_2DCH.fig.clear()
+            plt.close(self.hist_2DCH.fig)
+            del self.hist_2DCH
+        if catagory == 'partial':
+            gc.collect()
+            return
+        else:
+            if hasattr(self, 'observer'):
+                self.observer.stop()
+                del self.observer
+            self.export_prompt.window.destroy()
+            self.window.destroy()
+
 
 class STM_bj_export_prompt:
 
@@ -536,20 +559,20 @@ class STM_bj_export_prompt:
         except ImportError:
             pass
         # raw
-        self.check_raw_X = tk.BooleanVar(value=True)  #disabled
-        self.check_raw_G = tk.BooleanVar(value=True)
-        self.check_raw_logG = tk.BooleanVar(value=True)
+        self.check_raw_X = tk.BooleanVar(self.window, value=True)  #disabled
+        self.check_raw_G = tk.BooleanVar(self.window, value=True)
+        self.check_raw_logG = tk.BooleanVar(self.window, value=True)
         tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0)
         tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1)
         tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2)
         # 1D
-        self.check_1D_G = tk.BooleanVar(value=True)  #disabled
-        self.option_1D_count = tk.StringVar(value='Count')
+        self.check_1D_G = tk.BooleanVar(self.window, value=True)  #disabled
+        self.option_1D_count = tk.StringVar(self.window, value='Count')
         tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0)
         tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
         # 2D
-        self.check_2D_axis = tk.BooleanVar(value=False)
-        self.option_2D_count = tk.StringVar(value='Count')
+        self.check_2D_axis = tk.BooleanVar(self.window, value=False)
+        self.option_2D_count = tk.StringVar(self.window, value='Count')
         tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0)
         tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
         # button
@@ -649,12 +672,12 @@ class IVscan_GUI:
         tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
-        self.mode = tk.StringVar(value='Ebias')
-        self.Ebias = tk.DoubleVar(value=0.05)
-        self.I_unit = tk.DoubleVar(value=1e-6)
-        self.V_unit = tk.DoubleVar(value=1)
-        self.is_raw = tk.StringVar(value='raw')
-        self.directory_recursive = tk.BooleanVar(value=False)
+        self.mode = tk.StringVar(self.window, value='Ebias')
+        self.Ebias = tk.DoubleVar(self.window, value=0.05)
+        self.I_unit = tk.DoubleVar(self.window, value=1e-6)
+        self.V_unit = tk.DoubleVar(self.window, value=1)
+        self.is_raw = tk.StringVar(self.window, value='raw')
+        self.directory_recursive = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_config, text='Mode: ').grid(row=1, column=0)
         tk.OptionMenu(self.frame_config, self.mode, *['Ebias', 'Ewk']).grid(row=1, column=1)
         tk.Label(self.frame_config, text='Ebias: ').grid(row=1, column=2)
@@ -667,9 +690,9 @@ class IVscan_GUI:
         tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
         tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
         #row 2
-        self.num_segment = tk.IntVar(value=4)  # number of segments in one cycle
-        self.points_per_file = tk.IntVar(value=1000)
-        self.sampling_rate = tk.IntVar(value=40000)
+        self.num_segment = tk.IntVar(self.window, value=4)  # number of segments in one cycle
+        self.points_per_file = tk.IntVar(self.window, value=1000)
+        self.sampling_rate = tk.IntVar(self.window, value=40000)
         tk.Label(self.frame_config, text='Points/File: ').grid(row=2, column=0)
         tk.Entry(self.frame_config, textvariable=self.points_per_file, justify='center').grid(row=2, column=1)
         tk.Label(self.frame_config, text='#Segments: ').grid(row=2, column=2)
@@ -677,13 +700,13 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=2, column=4)
         tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=2, column=5)
         # row 3
-        self.V_upper = tk.DoubleVar(value=1.45)
-        self.V_lower = tk.DoubleVar(value=-1.45)
-        self.length = tk.IntVar(value=1200)
-        self.tolerance = tk.IntVar(value=0)
-        self.offset0 = tk.IntVar(value=1200)
-        self.offset1 = tk.IntVar(value=1200)
-        self.extract_method = tk.StringVar(value='height')
+        self.V_upper = tk.DoubleVar(self.window, value=1.45)
+        self.V_lower = tk.DoubleVar(self.window, value=-1.45)
+        self.length = tk.IntVar(self.window, value=1200)
+        self.tolerance = tk.IntVar(self.window, value=0)
+        self.offset0 = tk.IntVar(self.window, value=1200)
+        self.offset1 = tk.IntVar(self.window, value=1200)
+        self.extract_method = tk.StringVar(self.window, value='height')
         tk.Label(self.frame_config, text='V upper/\nlower: ').grid(row=3, column=0)
         frame_Vlimit = tk.Frame(self.frame_config)
         frame_Vlimit.grid(row=3, column=1)
@@ -703,13 +726,13 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='Method: ').grid(row=3, column=6)
         tk.OptionMenu(self.frame_config, self.extract_method, *['height', 'gradient']).grid(row=3, column=7)
         # row 4
-        self.I_limit = tk.DoubleVar(value=1e-5)
-        self.is_noise_remove = tk.BooleanVar(value=True)
-        self.V0 = tk.DoubleVar(value=0)
-        self.dV = tk.DoubleVar(value=0.1)
-        self.is_zeroing = tk.BooleanVar(value=True)
-        self.zeroing_center = tk.DoubleVar(value=0)
-        self.direction = tk.StringVar(value='both')
+        self.I_limit = tk.DoubleVar(self.window, value=1e-5)
+        self.is_noise_remove = tk.BooleanVar(self.window, value=True)
+        self.V0 = tk.DoubleVar(self.window, value=0)
+        self.dV = tk.DoubleVar(self.window, value=0.1)
+        self.is_zeroing = tk.BooleanVar(self.window, value=True)
+        self.zeroing_center = tk.DoubleVar(self.window, value=0)
+        self.direction = tk.StringVar(self.window, value='both')
         tk.Label(self.frame_config, text='I limit: ').grid(row=4, column=0)
         tk.Entry(self.frame_config, textvariable=self.I_limit, justify='center').grid(row=4, column=1)
         tk.Checkbutton(self.frame_config, variable=self.is_noise_remove, text='I min@V=').grid(row=4, column=2)
@@ -723,10 +746,10 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='Direction: ').grid(row=4, column=6)
         tk.OptionMenu(self.frame_config, self.direction, *['both', '-→+', '+→-']).grid(row=4, column=7)
         # row 5
-        self.V_min = tk.DoubleVar(value=-1.5)
-        self.V_max = tk.DoubleVar(value=1.5)
-        self.V_bins = tk.IntVar(value=300)
-        self.V_scale = tk.StringVar(value='linear')
+        self.V_min = tk.DoubleVar(self.window, value=-1.5)
+        self.V_max = tk.DoubleVar(self.window, value=1.5)
+        self.V_bins = tk.IntVar(self.window, value=300)
+        self.V_scale = tk.StringVar(self.window, value='linear')
         tk.Label(self.frame_config, text='V min: ').grid(row=5, column=0)
         tk.Entry(self.frame_config, textvariable=self.V_min, justify='center').grid(row=5, column=1)
         tk.Label(self.frame_config, text='V max: ').grid(row=5, column=2)
@@ -736,10 +759,10 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='V scale: ').grid(row=5, column=6)
         tk.OptionMenu(self.frame_config, self.V_scale, *['log', 'linear']).grid(row=5, column=7)
         # row 6
-        self.G_min = tk.DoubleVar(value=1e-5)
-        self.G_max = tk.DoubleVar(value=1e-1)
-        self.G_bins = tk.IntVar(value=400)
-        self.G_scale = tk.StringVar(value='log')
+        self.G_min = tk.DoubleVar(self.window, value=1e-5)
+        self.G_max = tk.DoubleVar(self.window, value=1e-1)
+        self.G_bins = tk.IntVar(self.window, value=400)
+        self.G_scale = tk.StringVar(self.window, value='log')
         tk.Label(self.frame_config, text='G min: ').grid(row=6, column=0)
         tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=6, column=1)
         tk.Label(self.frame_config, text='G max: ').grid(row=6, column=2)
@@ -749,10 +772,10 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='G scale: ').grid(row=6, column=6)
         tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=6, column=7)
         # row 7
-        self.I_min = tk.DoubleVar(value=1e-11)
-        self.I_max = tk.DoubleVar(value=1e-5)
-        self.I_bins = tk.IntVar(value=600)
-        self.I_scale = tk.StringVar(value='log')
+        self.I_min = tk.DoubleVar(self.window, value=1e-11)
+        self.I_max = tk.DoubleVar(self.window, value=1e-5)
+        self.I_bins = tk.IntVar(self.window, value=600)
+        self.I_scale = tk.StringVar(self.window, value='log')
         tk.Label(self.frame_config, text='I min: ').grid(row=7, column=0)
         tk.Entry(self.frame_config, textvariable=self.I_min, justify='center').grid(row=7, column=1)
         tk.Label(self.frame_config, text='I max: ').grid(row=7, column=2)
@@ -762,10 +785,10 @@ class IVscan_GUI:
         tk.Label(self.frame_config, text='I scale: ').grid(row=7, column=6)
         tk.OptionMenu(self.frame_config, self.I_scale, *['log', 'linear']).grid(row=7, column=7)
         # row 8
-        self.t_min = tk.DoubleVar(value=0)
-        self.t_max = tk.DoubleVar(value=0.18)
-        self.t_bins = tk.IntVar(value=1800)
-        self.t_scale = tk.StringVar(value='linear')
+        self.t_min = tk.DoubleVar(self.window, value=0)
+        self.t_max = tk.DoubleVar(self.window, value=0.18)
+        self.t_bins = tk.IntVar(self.window, value=1800)
+        self.t_scale = tk.StringVar(self.window, value='linear')
         tk.Label(self.frame_config, text='t min: ').grid(row=8, column=0)
         tk.Entry(self.frame_config, textvariable=self.t_min, justify='center').grid(row=8, column=1)
         tk.Label(self.frame_config, text='t max: ').grid(row=8, column=2)
@@ -792,10 +815,10 @@ class IVscan_GUI:
         # is_plot frame
         self.frame_is_plot = tk.Frame(self.window)
         self.frame_is_plot.pack(side='top', anchor='w')
-        self.plot_hist_GV = tk.BooleanVar(value=True)
-        self.plot_hist_IV = tk.BooleanVar(value=True)
-        self.plot_hist_IVt = tk.BooleanVar(value=False)
-        self.plot_hist_GVt = tk.BooleanVar(value=False)
+        self.plot_hist_GV = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_IV = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_IVt = tk.BooleanVar(self.window, value=False)
+        self.plot_hist_GVt = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram IV', variable=self.plot_hist_IV).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
@@ -845,6 +868,7 @@ class IVscan_GUI:
     def run(self):
         match self.is_run:
             case False:
+                self.cleanup('partial')
                 full_length = self.num_segment.get() * self.length.get() + self.offset0.get() + self.offset1.get()
                 self.run_config = {
                     "mode": self.mode.get(),
@@ -957,8 +981,8 @@ class IVscan_GUI:
                                 self.current_lines_GV = None
                                 self.canvas_GV.draw_idle()
 
-                    self.plot_trace_IV_GV = tk.BooleanVar(value=False)
-                    self.current_trace_IV_GV = tk.IntVar(value=-1)
+                    self.plot_trace_IV_GV = tk.BooleanVar(self.window, value=False)
+                    self.current_trace_IV_GV = tk.IntVar(self.window, value=-1)
                     self.current_lines_IV = None
                     self.current_lines_GV = None
                     frame_trace_IV = tk.Frame(self.frame_figure)
@@ -980,7 +1004,6 @@ class IVscan_GUI:
                         if action == 'show':
                             if self.plot_trace_It_Gt.get():
                                 if -self.V_full.shape[0] <= trace < self.V_full.shape[0]:
-                                    if self.time_array is None: self.time_array = np.arange(self.I_full.shape[1]) / self.hist_IVt.x_conversion
                                     if self.run_config['plot_hist_IVt']:
                                         if self.current_lines_It: self.current_lines_It.set_data(self.time_array, np.abs(self.I_full[trace]))
                                         else: self.current_lines_It = self.hist_IVt.ax.plot(self.time_array, np.abs(self.I_full[trace]), color='k')[0]
@@ -1005,11 +1028,11 @@ class IVscan_GUI:
                                 self.current_lines_Gt = None
                                 self.canvas_GVt.draw_idle()
 
-                    self.plot_trace_It_Gt = tk.BooleanVar(value=False)
-                    self.current_trace_It_Gt = tk.IntVar(value=-1)
+                    self.plot_trace_It_Gt = tk.BooleanVar(self.window, value=False)
+                    self.current_trace_It_Gt = tk.IntVar(self.window, value=-1)
                     self.current_lines_It = None
                     self.current_lines_Gt = None
-                    self.time_array = None
+                    self.time_array = np.arange(full_length) / self.hist_IVt.x_conversion
                     frame_trace_It = tk.Frame(self.frame_figure)
                     frame_trace_It.grid(row=2, column=10, sticky='w') if self.run_config['plot_hist_IVt'] else frame_trace_It.grid(row=2, column=15, sticky='w')
                     tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It_Gt).pack(side='left', anchor='w')
@@ -1148,10 +1171,10 @@ class IVscan_GUI:
             if self.run_config['plot_hist_IVt'] or self.run_config['plot_hist_GVt']:
                 G_full = IVscan.conductance(I_full, V_full if self.run_config['mode'] == 'Ebias' else self.run_config['Ebias'])
                 if self.run_config['plot_hist_IVt']:
-                    self.hist_IVt.add_data(I_full, V_full)
+                    self.hist_IVt.add_data(I_full, V_full, self.time_array)
                     self.canvas_IVt.draw_idle()
                 if self.run_config['plot_hist_GVt']:
-                    self.hist_GVt.add_data(V=V_full, G=G_full)
+                    self.hist_GVt.add_data(V=V_full, G=G_full, t=self.time_array)
                     self.canvas_GVt.draw_idle()
                 if self.current_trace_It_Gt.get() < 0: self.current_trace_It_Gt.set(self.current_trace_It_Gt.get())
                 self.I_full = np.vstack([self.I_full, I_full])
@@ -1227,6 +1250,41 @@ class IVscan_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
+    def cleanup(self, catagory: Literal['partial', 'all']):
+        if hasattr(self, 'I'): del self.I
+        if hasattr(self, 'V'): del self.V
+        if hasattr(self, 'G'): del self.G
+        if hasattr(self, 'I_full'): del self.I_full
+        if hasattr(self, 'V_full'): del self.V_full
+        if hasattr(self, 'G_full'): del self.G_full
+        if hasattr(self, 'pending'): del self.pending
+        if hasattr(self, 'time_array'): del self.time_array
+        if hasattr(self, 'hist_IV'):
+            self.hist_IV.fig.clear()
+            plt.close(self.hist_IV.fig)
+            del self.hist_IV
+        if hasattr(self, 'hist_GV'):
+            self.hist_GV.fig.clear()
+            plt.close(self.hist_GV.fig)
+            del self.hist_GV
+        if hasattr(self, 'hist_IVt'):
+            self.hist_IVt.fig.clear()
+            plt.close(self.hist_IVt.fig)
+            del self.hist_IVt
+        if hasattr(self, 'hist_GVt'):
+            self.hist_GVt.fig.clear()
+            plt.close(self.hist_GVt.fig)
+            del self.hist_GVt
+        if catagory == 'partial':
+            gc.collect()
+            return
+        else:
+            if hasattr(self, 'observer'):
+                self.observer.stop()
+                del self.observer
+            self.export_prompt.window.destroy()
+            self.window.destroy()
+
 
 class IVscan_export_prompt:
 
@@ -1254,12 +1312,12 @@ class IVscan_export_prompt:
         except ImportError:
             pass
         # raw
-        self.check_raw_V = tk.BooleanVar(value=True)  #disabled
-        self.check_raw_G = tk.BooleanVar(value=False)
-        self.check_raw_logG = tk.BooleanVar(value=True)
-        self.check_raw_I = tk.BooleanVar(value=False)
-        self.check_raw_absI = tk.BooleanVar(value=False)
-        self.check_raw_logI = tk.BooleanVar(value=True)
+        self.check_raw_V = tk.BooleanVar(self.window, value=True)  #disabled
+        self.check_raw_G = tk.BooleanVar(self.window, value=False)
+        self.check_raw_logG = tk.BooleanVar(self.window, value=True)
+        self.check_raw_I = tk.BooleanVar(self.window, value=False)
+        self.check_raw_absI = tk.BooleanVar(self.window, value=False)
+        self.check_raw_logI = tk.BooleanVar(self.window, value=True)
         tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1)
         tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2)
         tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3)
@@ -1267,13 +1325,13 @@ class IVscan_export_prompt:
         tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2)
         tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3)
         # GV
-        self.check_GV_axis = tk.BooleanVar(value=False)
-        self.option_GV_count = tk.StringVar(value='Count')
+        self.check_GV_axis = tk.BooleanVar(self.window, value=False)
+        self.option_GV_count = tk.StringVar(self.window, value='Count')
         tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0)
         tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
         # IV
-        self.check_IV_axis = tk.BooleanVar(value=False)
-        self.option_IV_count = tk.StringVar(value='Count')
+        self.check_IV_axis = tk.BooleanVar(self.window, value=False)
+        self.option_IV_count = tk.StringVar(self.window, value='Count')
         tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0)
         tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
         # button
