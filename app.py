@@ -4,7 +4,6 @@ import json
 import logging
 import multiprocessing
 import os
-import sys
 import threading
 import time
 import tkinter as tk
@@ -16,10 +15,7 @@ from typing import Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yaml
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
-from watchdog.events import FileCreatedEvent, FileSystemEventHandler
-from watchdog.observers import Observer
 
 from CHClab import IVscan, STM_bj
 
@@ -29,7 +25,8 @@ class Main:
     def __init__(self) -> None:
         self.window = root
         self.window.title('STM histogram')
-        self.window.protocol("WM_DELETE_WINDOW", sys.exit)
+        self.stop = threading.Event()
+        self.window.protocol("WM_DELETE_WINDOW", self.stop.set)
         self.window.resizable(False, False)
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
@@ -53,6 +50,7 @@ class Main:
         self.window.bind("<F2>", self.tab_rename_start)
         self.rename_entry.bind("<Return>", self.tab_rename_stop)
         self.rename_entry.bind("<Escape>", self.tab_rename_cancel)
+        threading.Thread(target=self.update_window_loop).start()
 
     def new_tab(self, name: str):
         match name:
@@ -91,6 +89,10 @@ class Main:
         try:
             tab = self.tabcontrol.nametowidget(self.tabcontrol.select())
             gui = tab.gui_object
+            try:
+                tab.gui_object.observer.stop()
+            except:
+                pass
             gui.export_prompt.window.destroy()
             gui.window.destroy()
             tab.destroy()
@@ -104,13 +106,21 @@ class Main:
         self.window.attributes('-topmost', self.always_on_top.get())
         self.window.update_idletasks()
 
+    def update_window_loop(self):
+        try:
+            while not self.stop.is_set():
+                root.update_idletasks()
+                self.stop.wait(5)
+        finally:
+            root.quit()
+
 
 def _set_directory(var: tk.StringVar, value: str):
     if value == '""' or value == '': return
     else: var.set(value)
 
 
-class STM_bj_GUI(FileSystemEventHandler):
+class STM_bj_GUI:
 
     def __init__(self, root: tk.Frame) -> None:
         self.window = root
@@ -196,7 +206,11 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
-        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
+        try:
+            import yaml
+            tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
+        except ImportError:
+            logger.warning('Module PyYAML was not found. Import/export settings can not be used.')
         tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
         # is_plot frame
         self.frame_is_plot = tk.Frame(self.window)
@@ -319,8 +333,8 @@ class STM_bj_GUI(FileSystemEventHandler):
                         if action == 'show':
                             if self.plot_trace_GS.get():
                                 if -self.G.shape[0] <= trace < self.G.shape[0]:
-                                    if self.current_lines_GS: self.current_lines_GS.remove()
-                                    self.current_lines_GS = self.hist_GS.ax.plot(self.X[trace], self.G[trace], color='k')[0]
+                                    if self.current_lines_GS: self.current_lines_GS.set_data(self.X[trace], self.G[trace])
+                                    else: self.current_lines_GS = self.hist_GS.ax.plot(self.X[trace], self.G[trace], color='k')[0]
                                     self.canvas_GS.draw_idle()
                         elif action == 'next':
                             if -self.G.shape[0] <= trace + 1 < self.G.shape[0]:
@@ -329,8 +343,10 @@ class STM_bj_GUI(FileSystemEventHandler):
                             if -self.G.shape[0] <= trace - 1 < self.G.shape[0]:
                                 self.current_trace_GS.set(trace - 1)
                         elif action == 'clear':
-                            if self.current_lines_GS: self.current_lines_GS.remove()
-                            self.canvas_GS.draw_idle()
+                            if self.current_lines_GS:
+                                self.current_lines_GS.remove()
+                                self.current_lines_GS = None
+                                self.canvas_GS.draw_idle()
 
                     self.plot_trace_GS = tk.BooleanVar(value=False)
                     self.current_trace_GS = tk.IntVar(value=-1)
@@ -350,15 +366,20 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.window.update_idletasks()
                 self.status_traces.config(text=0)
                 self.time_init = None
+                self._lock = threading.Condition()
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
-                self.observer.start()
-                logger.info(f'Start observer: {path}')
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
+                try:
+                    from watchdog.observers import Observer
+                    self.observer = Observer()
+                    self.observer.schedule(self.FileHandler(self), path=path, recursive=self.run_config['recursive'])
+                    self.observer.start()
+                    logger.info(f'Start observer: {path}')
+                    atexit.register(self.observer.stop)
+                    self.run_button.config(text='Stop', bg='red')
+                    self.is_run = True
+                except ImportError:
+                    logger.warning('Module watchdog was not found. Data can not be updated in realtime.')
             case True:
                 self.run_button.config(text='Run', bg='lime')
                 self.is_run = False
@@ -366,17 +387,27 @@ class STM_bj_GUI(FileSystemEventHandler):
                 logger.info(f'Stop observer')
                 gc.collect()
 
-    def on_created(self, event):
-        while True:
-            if self.time_init is not None: break
-            else: time.sleep(0.1)
-        if isinstance(event, FileCreatedEvent):
-            if (event.src_path.endswith('.txt')):
-                try:
-                    if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
-                    self.add_data(event.src_path)
-                except Exception as E:
-                    logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
+    try:
+        from watchdog.events import FileSystemEventHandler
+
+        class FileHandler(FileSystemEventHandler):
+
+            def __init__(self, GUI) -> None:
+                self.GUI = GUI
+
+            def on_created(self, event):
+                from watchdog.events import FileCreatedEvent
+                if isinstance(event, FileCreatedEvent):
+                    if (event.src_path.endswith('.txt')):
+                        try:
+                            with self.GUI._lock:
+                                self.GUI._lock.wait_for(lambda: self.GUI.time_init is not None)
+                            if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
+                            self.GUI.add_data(event.src_path)
+                        except Exception as E:
+                            logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
+    except ImportError:
+        pass
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -419,7 +450,7 @@ class STM_bj_GUI(FileSystemEventHandler):
                 self.canvas_G.draw_idle()
             if self.run_config['plot_hist_GS']:
                 self.hist_GS.add_data(G, X)
-                if self.current_trace_GS.get()<0: self.current_trace_GS.set(self.current_trace_GS.get())
+                if self.current_trace_GS.get() < 0: self.current_trace_GS.set(self.current_trace_GS.get())
                 self.canvas_GS.draw_idle()
             if self.run_config['plot_hist_Gt']:
                 self.hist_Gt.add_data(G, time)
@@ -432,6 +463,7 @@ class STM_bj_GUI(FileSystemEventHandler):
         self.window.update_idletasks()
 
     def import_setting(self):
+        import yaml
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
@@ -498,7 +530,11 @@ class STM_bj_export_prompt:
         self.tabcontrol.add(tab_raw, text='Raw data')
         self.tabcontrol.add(tab_1D, text='1D histogram')
         self.tabcontrol.add(tab_2D, text='2D histogram')
-        self.tabcontrol.add(tab_settings, text='Settings')
+        try:
+            import yaml
+            self.tabcontrol.add(tab_settings, text='Settings')
+        except ImportError:
+            pass
         # raw
         self.check_raw_X = tk.BooleanVar(value=True)  #disabled
         self.check_raw_G = tk.BooleanVar(value=True)
@@ -555,6 +591,7 @@ class STM_bj_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 3:
+                import yaml
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
                 data = {
@@ -597,7 +634,7 @@ class STM_bj_export_prompt:
         self.hide()
 
 
-class IVscan_GUI(FileSystemEventHandler):
+class IVscan_GUI:
 
     def __init__(self, iframe: tk.Frame) -> None:
         self.window = iframe
@@ -746,7 +783,11 @@ class IVscan_GUI(FileSystemEventHandler):
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=9, column=6, padx=10)
         self.is_run = False
-        tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=9, column=7)
+        try:
+            import yaml
+            tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=9, column=7)
+        except ImportError:
+            logger.warning('Module PyYAML was not found. Import/export settings can not be used.')
         tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=9, column=8)
         # is_plot frame
         self.frame_is_plot = tk.Frame(self.window)
@@ -754,10 +795,12 @@ class IVscan_GUI(FileSystemEventHandler):
         self.plot_hist_GV = tk.BooleanVar(value=True)
         self.plot_hist_IV = tk.BooleanVar(value=True)
         self.plot_hist_IVt = tk.BooleanVar(value=False)
+        self.plot_hist_GVt = tk.BooleanVar(value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram IV', variable=self.plot_hist_IV).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram IVt', variable=self.plot_hist_IVt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram GVt', variable=self.plot_hist_GVt).pack(side='left')
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -829,7 +872,8 @@ class IVscan_GUI(FileSystemEventHandler):
                     'I_scale': self.I_scale.get(),
                     'plot_hist_GV': self.plot_hist_GV.get(),
                     'plot_hist_IV': self.plot_hist_IV.get(),
-                    'plot_hist_IVt': self.plot_hist_IVt.get()
+                    'plot_hist_IVt': self.plot_hist_IVt.get(),
+                    'plot_hist_GVt': self.plot_hist_GVt.get()
                 }
                 path = self.directory_path.get()
                 if not os.path.isdir(path):
@@ -843,8 +887,10 @@ class IVscan_GUI(FileSystemEventHandler):
                 gc.collect()
                 self.I = np.empty((0, self.length.get()))
                 self.V = np.empty((0, self.length.get()))
+                self.G = np.empty((0, self.length.get()))
                 self.I_full = np.empty((0, full_length))
                 self.V_full = np.empty((0, full_length))
+                self.G_full = np.empty((0, full_length))
                 # hist IV
                 if self.run_config['plot_hist_IV']:
                     self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
@@ -870,6 +916,15 @@ class IVscan_GUI(FileSystemEventHandler):
                     self.navtool_IVt = NavigationToolbar2Tk(self.canvas_IVt, self.frame_figure, pack_toolbar=False)
                     self.navtool_IVt.grid(row=1, column=10, columnspan=4, sticky='w')
                     self.canvas_IVt.draw_idle()
+                # hist GVt
+                if self.run_config['plot_hist_GVt']:
+                    self.hist_GVt = IVscan.Hist_GVt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                                                    'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.canvas_GVt = FigureCanvasTkAgg(self.hist_GVt.fig, self.frame_figure)
+                    self.canvas_GVt.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
+                    self.navtool_GVt = NavigationToolbar2Tk(self.canvas_GVt, self.frame_figure, pack_toolbar=False)
+                    self.navtool_GVt.grid(row=1, column=15, columnspan=4, sticky='w')
+                    self.canvas_GVt.draw_idle()
                 # # Trace IV/GV
                 if self.run_config['plot_hist_IV'] or self.run_config['plot_hist_GV']:
 
@@ -879,12 +934,12 @@ class IVscan_GUI(FileSystemEventHandler):
                             if self.plot_trace_IV_GV.get():
                                 if -self.V.shape[0] <= trace < self.V.shape[0]:
                                     if self.run_config['plot_hist_IV']:
-                                        if self.current_lines_IV: self.current_lines_IV.remove()
-                                        self.current_lines_IV = self.hist_IV.ax.plot(self.V[trace], np.abs(self.I[trace]), color='k')[0]
+                                        if self.current_lines_IV: self.current_lines_IV.set_data(self.V[trace], np.abs(self.I[trace]))
+                                        else: self.current_lines_IV = self.hist_IV.ax.plot(self.V[trace], np.abs(self.I[trace]), color='k')[0]
                                         self.canvas_IV.draw_idle()
                                     if self.run_config['plot_hist_GV']:
-                                        if self.current_lines_GV: self.current_lines_GV.remove()
-                                        self.current_lines_GV = self.hist_GV.ax.plot(self.V[trace], np.abs(IVscan.conductance(self.I[trace], self.V[trace])), color='k')[0]
+                                        if self.current_lines_GV: self.current_lines_GV.set_data(self.V[trace], np.abs(self.G[trace]))
+                                        else: self.current_lines_GV = self.hist_GV.ax.plot(self.V[trace], np.abs(self.G[trace]), color='k')[0]
                                         self.canvas_GV.draw_idle()
                         elif action == 'next':
                             if -self.V.shape[0] <= trace + 1 < self.V.shape[0]:
@@ -895,9 +950,11 @@ class IVscan_GUI(FileSystemEventHandler):
                         elif action == 'clear':
                             if self.current_lines_IV:
                                 self.current_lines_IV.remove()
+                                self.current_lines_IV = None
                                 self.canvas_IV.draw_idle()
                             if self.current_lines_GV:
                                 self.current_lines_GV.remove()
+                                self.current_lines_GV = None
                                 self.canvas_GV.draw_idle()
 
                     self.plot_trace_IV_GV = tk.BooleanVar(value=False)
@@ -915,41 +972,55 @@ class IVscan_GUI(FileSystemEventHandler):
                     current_trace_IV_entry.bind("<Up>", lambda *args: show_trace_IV_GV('next'))
                     self.plot_trace_IV_GV.trace_add('write', lambda *args: show_trace_IV_GV('show' if self.plot_trace_IV_GV.get() else 'clear'))
                     self.current_trace_IV_GV.trace_add('write', lambda *args: show_trace_IV_GV('show'))
-                # Trace IVt
-                if self.run_config['plot_hist_IVt']:
+                # Trace IVt/GVt
+                if self.run_config['plot_hist_IVt'] or self.run_config['plot_hist_GVt']:
 
                     def show_trace_It(action: Literal['next', 'prev', 'show', 'clear']):
-                        trace = self.current_trace_It.get()
+                        trace = self.current_trace_It_Gt.get()
                         if action == 'show':
-                            if self.plot_trace_It.get():
+                            if self.plot_trace_It_Gt.get():
                                 if -self.V_full.shape[0] <= trace < self.V_full.shape[0]:
-                                    if self.current_lines_It: self.current_lines_It.remove()
-                                    self.current_lines_It = self.hist_IVt.ax.plot(np.arange(self.I_full.shape[1]) / self.hist_IVt.x_conversion, np.abs(self.I_full[trace]), color='k')[0]
-                                    self.canvas_IVt.draw_idle()
+                                    if self.time_array is None: self.time_array = np.arange(self.I_full.shape[1]) / self.hist_IVt.x_conversion
+                                    if self.run_config['plot_hist_IVt']:
+                                        if self.current_lines_It: self.current_lines_It.set_data(self.time_array, np.abs(self.I_full[trace]))
+                                        else: self.current_lines_It = self.hist_IVt.ax.plot(self.time_array, np.abs(self.I_full[trace]), color='k')[0]
+                                        self.canvas_IVt.draw_idle()
+                                    if self.run_config['plot_hist_GVt']:
+                                        if self.current_lines_Gt: self.current_lines_Gt.set_data(self.time_array, np.abs(self.G_full[trace]))
+                                        else: self.current_lines_Gt = self.hist_GVt.ax.plot(self.time_array, np.abs(self.G_full[trace]), color='k')[0]
+                                        self.canvas_GVt.draw_idle()
                         elif action == 'next':
                             if -self.V_full.shape[0] <= trace + 1 < self.V_full.shape[0]:
-                                self.current_trace_It.set(trace + 1)
+                                self.current_trace_It_Gt.set(trace + 1)
                         elif action == 'prev':
                             if -self.V_full.shape[0] <= trace - 1 < self.V_full.shape[0]:
-                                self.current_trace_It.set(trace - 1)
+                                self.current_trace_It_Gt.set(trace - 1)
                         elif action == 'clear':
-                            self.current_lines_It.remove()
-                            self.canvas_IVt.draw_idle()
+                            if self.current_lines_It:
+                                self.current_lines_It.remove()
+                                self.current_lines_It = None
+                                self.canvas_IVt.draw_idle()
+                            if self.current_lines_Gt:
+                                self.current_lines_Gt.remove()
+                                self.current_lines_Gt = None
+                                self.canvas_GVt.draw_idle()
 
-                    self.plot_trace_It = tk.BooleanVar(value=False)
-                    self.current_trace_It = tk.IntVar(value=-1)
+                    self.plot_trace_It_Gt = tk.BooleanVar(value=False)
+                    self.current_trace_It_Gt = tk.IntVar(value=-1)
                     self.current_lines_It = None
+                    self.current_lines_Gt = None
+                    self.time_array = None
                     frame_trace_It = tk.Frame(self.frame_figure)
-                    frame_trace_It.grid(row=2, column=10, sticky='w')
-                    tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It).pack(side='left', anchor='w')
+                    frame_trace_It.grid(row=2, column=10, sticky='w') if self.run_config['plot_hist_IVt'] else frame_trace_It.grid(row=2, column=15, sticky='w')
+                    tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It_Gt).pack(side='left', anchor='w')
                     tk.Button(frame_trace_It, text='<', command=lambda: show_trace_It('prev')).pack(side='left', anchor='w')
-                    current_trace_It_entry = tk.Entry(frame_trace_It, textvariable=self.current_trace_It, justify='center', width=8)
+                    current_trace_It_entry = tk.Entry(frame_trace_It, textvariable=self.current_trace_It_Gt, justify='center', width=8)
                     current_trace_It_entry.pack(side='left', anchor='w')
                     tk.Button(frame_trace_It, text='>', command=lambda: show_trace_It('next')).pack(side='left', anchor='w')
                     current_trace_It_entry.bind("<Down>", lambda *args: show_trace_It('prev'))
                     current_trace_It_entry.bind("<Up>", lambda *args: show_trace_It('next'))
-                    self.plot_trace_It.trace_add('write', lambda *args: show_trace_It('show' if self.plot_trace_It.get() else 'clear'))
-                    self.current_trace_It.trace_add('write', lambda *args: show_trace_It('show'))
+                    self.plot_trace_It_Gt.trace_add('write', lambda *args: show_trace_It('show' if self.plot_trace_It_Gt.get() else 'clear'))
+                    self.current_trace_It_Gt.trace_add('write', lambda *args: show_trace_It('show'))
                 self.colorbar_apply()
                 self.window.update_idletasks()
                 if self.run_config['data_type'] == 'raw': self.pending = list()
@@ -958,13 +1029,17 @@ class IVscan_GUI(FileSystemEventHandler):
                 self._lock = threading.RLock()
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
-                self.observer = Observer()
-                self.observer.schedule(self, path=path, recursive=self.run_config['recursive'])
-                self.observer.start()
-                logger.info(f'Start observer: {path}')
-                atexit.register(self.observer.stop)
-                self.run_button.config(text='Stop', bg='red')
-                self.is_run = True
+                try:
+                    from watchdog.observers import Observer
+                    self.observer = Observer()
+                    self.observer.schedule(self.FileHandler(self), path=path, recursive=self.run_config['recursive'])
+                    self.observer.start()
+                    logger.info(f'Start observer: {path}')
+                    atexit.register(self.observer.stop)
+                    self.run_button.config(text='Stop', bg='red')
+                    self.is_run = True
+                except ImportError:
+                    logger.warning('Module watchdog was not found. Data can not be updated in realtime.')
             case True:
                 self.run_button.config(text='Run', bg='lime')
                 self.is_run = False
@@ -972,14 +1047,25 @@ class IVscan_GUI(FileSystemEventHandler):
                 logger.info(f'Stop observer')
                 gc.collect()
 
-    def on_created(self, event):
-        if isinstance(event, FileCreatedEvent):
-            if (event.src_path.endswith('.txt')):
-                try:
-                    if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
-                    self.add_data(event.src_path)
-                except Exception as E:
-                    logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
+    try:
+        from watchdog.events import FileSystemEventHandler
+
+        class FileHandler(FileSystemEventHandler):
+
+            def __init__(self, GUI) -> None:
+                self.GUI = GUI
+
+            def on_created(self, event):
+                from watchdog.events import FileCreatedEvent
+                if isinstance(event, FileCreatedEvent):
+                    if (event.src_path.endswith('.txt')):
+                        try:
+                            if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
+                            self.GUI.add_data(event.src_path)
+                        except Exception as E:
+                            logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
+    except ImportError:
+        pass
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
@@ -1032,6 +1118,7 @@ class IVscan_GUI(FileSystemEventHandler):
                     V, I = np.stack(df).swapaxes(0, 1)
                     self.I = np.empty((0, max_length))
                     self.V = np.empty((0, max_length))
+                    self.G = np.empty((0, max_length))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
             self.status_last_file.config(bg='red')
@@ -1044,32 +1131,38 @@ class IVscan_GUI(FileSystemEventHandler):
                 if I.size == 0:
                     self.status_last_file.config(bg='lime')
                     return
-                if self.run_config['direction'] == '-→+':
-                    I, V = IVscan.split_scan_direction(I, V)[0]
-                elif self.run_config['direction'] == '+→-':
-                    I, V = IVscan.split_scan_direction(I, V)[1]
+                if self.run_config['direction'] == '-→+': I, V = IVscan.split_scan_direction(I, V)[0]
+                elif self.run_config['direction'] == '+→-': I, V = IVscan.split_scan_direction(I, V)[1]
+                G = IVscan.conductance(I, V if self.run_config['mode'] == 'Ebias' else self.run_config['Ebias'])
                 if self.run_config['plot_hist_IV']:
                     self.hist_IV.add_data(I, V)
                     self.canvas_IV.draw_idle()
                 if self.run_config['plot_hist_GV']:
-                    if self.run_config['mode'] == 'Ebias': self.hist_GV.add_data(I, V)
-                    elif self.run_config['mode'] == 'Ewk': self.hist_GV.add_data(G=IVscan.conductance(I, self.run_config['Ebias']), V=V)
+                    self.hist_GV.add_data(V=V, G=G)
                     self.canvas_GV.draw_idle()
-                if self.current_trace_IV_GV.get()<0: self.current_trace_IV_GV.set(self.current_trace_IV_GV.get())
+                if self.current_trace_IV_GV.get() < 0: self.current_trace_IV_GV.set(self.current_trace_IV_GV.get())
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
+                self.G = np.vstack([self.G, G])
                 self.status_traces.config(text=self.I.shape[0])
-            if self.run_config['plot_hist_IVt']:
-                self.hist_IVt.add_data(I_full, V_full)
-                if self.current_trace_It.get()<0: self.current_trace_It.set(self.current_trace_It.get())
-                self.canvas_IVt.draw_idle()
+            if self.run_config['plot_hist_IVt'] or self.run_config['plot_hist_GVt']:
+                G_full = IVscan.conductance(I_full, V_full if self.run_config['mode'] == 'Ebias' else self.run_config['Ebias'])
+                if self.run_config['plot_hist_IVt']:
+                    self.hist_IVt.add_data(I_full, V_full)
+                    self.canvas_IVt.draw_idle()
+                if self.run_config['plot_hist_GVt']:
+                    self.hist_GVt.add_data(V=V_full, G=G_full)
+                    self.canvas_GVt.draw_idle()
+                if self.current_trace_It_Gt.get() < 0: self.current_trace_It_Gt.set(self.current_trace_It_Gt.get())
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
+                self.G_full = np.vstack([self.G_full, G_full])
                 self.status_cycles.config(text=self.I_full.shape[0])
             self.status_last_file.config(bg='lime')
             self.window.update_idletasks()
 
     def import_setting(self):
+        import yaml
         path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
         if not path: return
         with open(path, mode='r', encoding='utf-8') as f:
@@ -1116,7 +1209,8 @@ class IVscan_GUI(FileSystemEventHandler):
             't scale': self.t_scale,
             'hist_GV': self.plot_hist_GV,
             'hist_IV': self.plot_hist_IV,
-            'hist_IVt': self.plot_hist_IVt
+            'hist_IVt': self.plot_hist_IVt,
+            'hist_GVt': self.plot_hist_GVt
         }
         not_valid = list()
         for setting, attribute in settings.items():
@@ -1154,7 +1248,11 @@ class IVscan_export_prompt:
         self.tabcontrol.add(tab_raw, text='Raw data')
         self.tabcontrol.add(tab_GV, text='GV histogram')
         self.tabcontrol.add(tab_IV, text='IV histogram')
-        self.tabcontrol.add(tab_settings, text='Settings')
+        try:
+            import yaml
+            self.tabcontrol.add(tab_settings, text='Settings')
+        except ImportError:
+            pass
         # raw
         self.check_raw_V = tk.BooleanVar(value=True)  #disabled
         self.check_raw_G = tk.BooleanVar(value=False)
@@ -1226,6 +1324,7 @@ class IVscan_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 3:
+                import yaml
                 path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
                 if not path: return
                 data = {
@@ -1271,6 +1370,7 @@ class IVscan_export_prompt:
                     'hist_GV': self.root.plot_hist_GV.get(),
                     'hist_IV': self.root.plot_hist_IV.get(),
                     'hist_IVt': self.root.plot_hist_IVt.get(),
+                    'hist_GVt': self.root.plot_hist_GVt.get(),
                     'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
                 }
                 if os.path.exists(path):

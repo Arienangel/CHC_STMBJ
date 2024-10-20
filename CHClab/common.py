@@ -12,7 +12,6 @@ import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scipy.interpolate
 import scipy.optimize
 import scipy.signal
 from scipy.constants import physical_constants
@@ -94,9 +93,12 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers: int 
         elif path.endswith('.npy'):
             return np.load(path)
         elif path.endswith('tdms'):
-            from nptdms import TdmsFile
-            with TdmsFile.read(path) as f:
-                return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
+            try:
+                from nptdms import TdmsFile
+                with TdmsFile.read(path) as f:
+                    return pd.concat([g.as_dataframe() for g in f.groups()], axis=0).values.T
+            except ImportError:
+                raise ImportError('Module nptdms was not found. TDMS files can not be read.')
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(1) as executor:
                 return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
@@ -149,9 +151,12 @@ def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = Fal
         if path.endswith('.txt'):
             return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
         elif path.endswith('.tdms'):
-            from nptdms import TdmsFile
-            with TdmsFile.read(path) as f:
-                return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
+            try:
+                from nptdms import TdmsFile
+                with TdmsFile.read(path) as f:
+                    return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
+            except ImportError:
+                raise ImportError('Module nptdms was not found. TDMS files can not be read.')
         elif path.endswith('zip'):
             with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
                 logging.debug(f'Use {max_workers} processes in load_data_with_metadata')

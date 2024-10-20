@@ -134,17 +134,21 @@ class Hist_GV(Hist2D):
         self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
         self.ax.set_ylabel('Conductance ($G/G_0$)')
         self.colorbar.set_label('Count/trace')
+        self.xlabel = xlabel
 
-    def add_data(self, I: np.ndarray = None, V: np.ndarray = None, *, G: np.ndarray = None, **kwargs) -> None:
+    def add_data(self, I: np.ndarray = None, V: np.ndarray = None, *, G: np.ndarray = None, Vbias: float | np.ndarray = None, **kwargs) -> None:
         """
         Add data into 2D histogram (GV)
 
         Args:
             I (ndarray): 2D I array with shape (trace, length)
-            V (ndarray): 2D Ebias array with shape (trace, length)
-            G (ndarray, optional): 2D G array with shape (trace, length), this will overwrite I
+            V (ndarray): 2D V array with shape (trace, length)
+            G (ndarray, optional): 2D G array with shape (trace, length), this will ignore I
+            Vbias (float|np.ndarray, optional): only used if x-axis is not Ebias
         """
-        if G is None: G = conductance(I, V)
+        if G is None:
+            if self.xlabel == 'bias': G = conductance(I, V)
+            else: G = conductance(I, Vbias)
         super().add_data(V, np.abs(G), **kwargs)
 
 
@@ -162,7 +166,7 @@ class Hist_IV(Hist2D):
 
         Args:
             I (ndarray): 2D I array with shape (trace, length)
-            V (ndarray): 2D Ebias array with shape (trace, length)
+            V (ndarray): 2D V array with shape (trace, length)
         """
         super().add_data(V, np.abs(I), **kwargs)
 
@@ -215,16 +219,68 @@ class Hist_IVt(Hist2D):
         self.ax2.set_ylabel('$E_{%s}\/(V)$' % xlabel)
         self.x_conversion = x_conversion
 
-    def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
+    def add_data(self, I: np.ndarray, V: np.ndarray, t: np.array = None, **kwargs) -> None:
         """
-        Add data into 2D histogram (GV)
+        Add data into 2D histogram (IVt)
 
         Args:
             I (ndarray): 2D I array with shape (trace, length)
-            V (ndarray): 2D Ebias array with shape (trace, length)
+            V (ndarray): 2D V array with shape (trace, length)
+            t (ndarray, optional): 2D t array with shape (trace, length)
         """
-        t = np.mgrid[0:I.shape[0]:1, 0:I.shape[1]:1][1] / self.x_conversion
+        if t is None: t = np.mgrid[0:I.shape[0]:1, 0:I.shape[1]:1][1] / self.x_conversion
+        elif t.ndim == 1: t = np.tile(t, (I.shape[0], 1))
         super().add_data(t, np.abs(I), **kwargs)
+        V = pd.Series(list(V)).drop_duplicates()
+        V_new = V[~V.isin(self.plot2)]
+        if V_new.size > 0:
+            self.ax2.plot(t[0], np.stack(V_new).T, color='black', linewidth=0.5)
+            self.plot2 = pd.concat([self.plot2, V_new])
+
+
+class Hist_GVt(Hist2D):
+
+    def __init__(self,
+                 xlim: tuple[float, float] = (0, 0.2),
+                 y1lim: tuple[float, float] = (1e-5, 1e-1),
+                 y2lim: tuple[float, float] = (-1.5, 1.5),
+                 num_x_bin: float = 1000,
+                 num_y1_bin: float = 300,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 y1scale: Literal['linear', 'log'] = 'log',
+                 y2scale: Literal['linear', 'log'] = 'linear',
+                 x_conversion: float = 40000,
+                 xlabel: Literal['bias', 'wk'] = 'bias',
+                 **kwargs) -> None:
+        super().__init__(xlim, y1lim, num_x_bin, num_y1_bin, xscale, y1scale, **kwargs)
+        self.colorbar.remove()
+        self.ax2 = self.ax.twinx()
+        self.plot2 = pd.Series()
+        self.ax2.set_ylim(*sorted(y2lim))
+        self.ax2.set_yscale(y2scale)
+        self.ax.set_xlabel('Time (s)')
+        self.ax.set_ylabel('Conductance ($G/G_0$)')
+        self.ax2.set_ylabel('$E_{%s}\/(V)$' % xlabel)
+        self.x_conversion = x_conversion
+        self.xlabel = xlabel
+
+    def add_data(self, I: np.ndarray = None, V: np.ndarray = None, t: np.array = None, *, G: np.ndarray = None, Vbias: float | np.ndarray = None, **kwargs) -> None:
+        """
+        Add data into 2D histogram (GVt)
+
+        Args:
+            I (ndarray): 2D I array with shape (trace, length)
+            V (ndarray): 2D V array with shape (trace, length)
+            t (ndarray, optional): 2D t array with shape (trace, length)
+            G (ndarray, optional): 2D G array with shape (trace, length), this will ignore I
+            Vbias (float|np.ndarray, optional): only used if x-axis is not Ebias
+        """
+        if G is None:
+            if self.xlabel == 'bias': G = conductance(I, V)
+            else: G = conductance(I, Vbias)
+        if t is None: t = np.mgrid[0:G.shape[0]:1, 0:G.shape[1]:1][1] / self.x_conversion
+        elif t.ndim == 1: t = np.tile(t, (G.shape[0], 1))
+        super().add_data(t, np.abs(G), **kwargs)
         V = pd.Series(list(V)).drop_duplicates()
         V_new = V[~V.isin(self.plot2)]
         if V_new.size > 0:
