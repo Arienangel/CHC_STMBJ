@@ -4,11 +4,13 @@ import json
 import logging
 import multiprocessing
 import os
+import sys
 import threading
 import time
 import tkinter as tk
 import tkinter.filedialog
 import tkinter.messagebox
+from queue import Queue
 from tkinter import ttk
 from typing import Literal
 
@@ -20,13 +22,23 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 from CHClab import IVscan, STM_bj
 
 
+class Queue_Item:
+
+    def __init__(self, func, *args, **kwargs) -> None:
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        self.func(*self.args, **self.kwargs)
+
+
 class Main:
 
     def __init__(self) -> None:
         self.window = root
         self.window.title('STM histogram')
-        self.stop = threading.Event()
-        self.window.protocol("WM_DELETE_WINDOW", self.stop.set)
+        self.window.protocol("WM_DELETE_WINDOW", self.stop)
         self.window.resizable(False, False)
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
@@ -50,7 +62,6 @@ class Main:
         self.window.bind("<F2>", self.tab_rename_start)
         self.rename_entry.bind("<Return>", self.tab_rename_stop)
         self.rename_entry.bind("<Escape>", self.tab_rename_cancel)
-        threading.Thread(target=self.update_window_loop).start()
 
     def new_tab(self, name: str):
         match name:
@@ -91,6 +102,7 @@ class Main:
             tab.gui_object.cleanup('all')
             tab.destroy()
             del tab.gui_object
+            self.window.update_idletasks()
             gc.collect()
         except:
             return
@@ -99,13 +111,9 @@ class Main:
         self.window.attributes('-topmost', self.always_on_top.get())
         self.window.update_idletasks()
 
-    def update_window_loop(self):
-        try:
-            while not self.stop.is_set():
-                root.update_idletasks()
-                self.stop.wait(5)
-        finally:
-            root.quit()
+    def stop(self):
+        root.quit()
+        sys.exit()
 
 
 def _set_directory(var: tk.StringVar, value: str):
@@ -231,26 +239,24 @@ class STM_bj_GUI:
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting')
         self.status_last_file.pack(side='left')
+        self.queue = Queue()
+        self.updatetk()
 
     def colorbar_apply(self, *args):
-
-        def apply():
-            try:
-                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                if colorbar_conf != "\n":
-                    cmap = json.loads(colorbar_conf)
-                    if self.run_config['plot_hist_GS']:
-                        self.hist_GS.set_cmap(cmap=cmap)
-                        self.canvas_GS.draw_idle()
-                    if self.run_config['plot_hist_Gt']:
-                        self.hist_Gt.set_cmap(cmap=cmap)
-                        self.canvas_Gt.draw_idle()
-            except Exception as E:
-                return
-            finally:
-                self.colorbar_conf.edit_modified(False)
-
-        threading.Thread(target=apply).start()
+        try:
+            colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+            if colorbar_conf != "\n":
+                cmap = json.loads(colorbar_conf)
+                if self.run_config['plot_hist_GS']:
+                    self.hist_GS.set_cmap(cmap=cmap)
+                    self.canvas_GS.draw_idle()
+                if self.run_config['plot_hist_Gt']:
+                    self.hist_Gt.set_cmap(cmap=cmap)
+                    self.canvas_Gt.draw_idle()
+        except Exception as E:
+            return
+        finally:
+            self.colorbar_conf.edit_modified(False)
 
     def run(self):
         match self.is_run:
@@ -357,10 +363,10 @@ class STM_bj_GUI:
                     self.plot_trace_GS.trace_add('write', lambda *args: show_trace_GS('show' if self.plot_trace_GS.get() else 'clear'))
                     self.current_trace_GS.trace_add('write', lambda *args: show_trace_GS('show'))
                 self.colorbar_apply()
-                self.window.update_idletasks()
                 self.status_traces.config(text=0)
-                self.time_init = None
-                self._lock = threading.Condition()
+                self.window.update_idletasks()
+                self._lock = threading.Lock()
+                self._lock.acquire()
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
                 try:
@@ -395,8 +401,9 @@ class STM_bj_GUI:
                     if (event.src_path.endswith('.txt')):
                         try:
                             with self.GUI._lock:
-                                self.GUI._lock.wait_for(lambda: self.GUI.time_init is not None)
-                            if os.path.getsize(event.src_path) == 0: time.sleep(0.1)
+                                if os.path.getsize(event.src_path) == 0:
+                                    time.sleep(0.5)
+                                    if os.path.getsize(event.src_path) == 0: raise RuntimeWarning('Empty file')
                             self.GUI.add_data(event.src_path)
                         except Exception as E:
                             logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
@@ -405,14 +412,14 @@ class STM_bj_GUI:
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
-            self.status_last_file.config(text=path, bg='yellow')
+            self.queue.put(Queue_Item(self.status_last_file.config, text=path, bg='yellow'))
             if os.path.isdir(path):
                 if not os.listdir(path):  # empty directory
-                    self.time_init = 0
-                    self.status_last_file.config(bg='lime')
+                    self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
+                    self._lock.release()
                     return
         else:
-            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
+            self.queue.put(Queue_Item(self.status_last_file.config, text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow'))
         try:
             logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
@@ -421,8 +428,9 @@ class STM_bj_GUI:
                     df['extracted'] = df['data'].apply(lambda g: STM_bj.extract_data(g, **self.run_config))
                     G = np.concatenate(df['extracted'].values)
                     time = np.repeat(df['time'].values, df['extracted'].apply(lambda g: g.shape[0]).values)
-                    if not self.time_init: self.time_init = time.min()
-                    time = time - self.time_init
+                    if not hasattr(self, 'time_init'):
+                        self.time_init = time.min()
+                        if self._lock.locked(): self._lock.release()
                 case 'cut':
                     df = STM_bj.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())['data']
                     length = df.apply(lambda x: x.shape[-1])
@@ -433,7 +441,7 @@ class STM_bj_GUI:
                     self.X = np.empty((0, max_length))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
-            self.status_last_file.config(bg='red')
+            self.queue.put(Queue_Item(self.status_last_file.config, bg='red'))
             return
         if G.size > 0:
             X = STM_bj.get_displacement(G, self.run_config['zero_point'], self.run_config['x_conversion'])
@@ -441,20 +449,19 @@ class STM_bj_GUI:
             self.X = np.vstack([self.X, X])
             if self.run_config['plot_hist_G']:
                 self.hist_G.add_data(G, set_ylim=self.autoscale_G.get())
-                self.canvas_G.draw_idle()
+                self.queue.put(Queue_Item(self.canvas_G.draw_idle))
             if self.run_config['plot_hist_GS']:
                 self.hist_GS.add_data(G, X)
-                if self.current_trace_GS.get() < 0: self.current_trace_GS.set(self.current_trace_GS.get())
-                self.canvas_GS.draw_idle()
-            if self.run_config['plot_hist_Gt']:
-                self.hist_Gt.add_data(G, time)
-                self.canvas_Gt.draw_idle()
+                if self.current_trace_GS.get() < 0: self.queue.put(Queue_Item(self.current_trace_GS.set, self.current_trace_GS.get()))
+                self.queue.put(Queue_Item(self.canvas_GS.draw_idle))
+            if self.run_config['plot_hist_Gt'] and hasattr(self, 'time_init'):
+                self.hist_Gt.add_data(G, time - self.time_init)
+                self.queue.put(Queue_Item(self.canvas_Gt.draw_idle))
             if self.run_config['plot_2DCH']:
                 self.hist_2DCH.add_data(G)
-                self.canvas_2DCH.draw_idle()
-            self.status_traces.config(text=self.G.shape[0])
-        self.status_last_file.config(bg='lime')
-        self.window.update_idletasks()
+                self.queue.put(Queue_Item(self.canvas_2DCH.draw_idle))
+            self.queue.put(Queue_Item(self.status_traces.config, text=self.G.shape[0]))
+        self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
 
     def import_setting(self):
         import yaml
@@ -503,24 +510,30 @@ class STM_bj_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
+    def updatetk(self):
+        while not self.queue.empty():
+            try:
+                item: Queue_Item = self.queue.get()
+                item.run()
+            except Exception as E:
+                logger.warning(f'{type(E).__name__}: {E.args}')
+        self.window.after(100, self.updatetk)
+
     def cleanup(self, catagory: Literal['partial', 'all']):
+        if hasattr(self, 'time_init'): del self.time_init
         if hasattr(self, 'G'): del self.G
         if hasattr(self, 'X'): del self.X
         if hasattr(self, 'hist_G'):
             self.hist_G.fig.clear()
-            plt.close(self.hist_G.fig)
             del self.hist_G
         if hasattr(self, 'hist_GS'):
             self.hist_GS.fig.clear()
-            plt.close(self.hist_GS.fig)
             del self.hist_GS
         if hasattr(self, 'hist_Gt'):
             self.hist_Gt.fig.clear()
-            plt.close(self.hist_Gt.fig)
             del self.hist_Gt
         if hasattr(self, 'hist_2DCH'):
             self.hist_2DCH.fig.clear()
-            plt.close(self.hist_2DCH.fig)
             del self.hist_2DCH
         if catagory == 'partial':
             gc.collect()
@@ -841,29 +854,30 @@ class IVscan_GUI:
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting', anchor='w')
         self.status_last_file.pack(side='left', anchor='w')
+        self.queue = Queue()
+        self.updatetk()
 
     def colorbar_apply(self, *args):
-
-        def apply():
-            try:
-                colorbar_conf = self.colorbar_conf.get('0.0', 'end')
-                if colorbar_conf != "\n":
-                    cmap = json.loads(colorbar_conf)
-                    if self.run_config['plot_hist_GV']:
-                        self.hist_GV.set_cmap(cmap=cmap)
-                        self.canvas_GV.draw_idle()
-                    if self.run_config['plot_hist_IV']:
-                        self.hist_IV.set_cmap(cmap=cmap)
-                        self.canvas_IV.draw_idle()
-                    if self.run_config['plot_hist_IVt']:
-                        self.hist_IVt.set_cmap(cmap=cmap)
-                        self.canvas_IVt.draw_idle()
-            except Exception as E:
-                return
-            finally:
-                self.colorbar_conf.edit_modified(False)
-
-        threading.Thread(target=apply).start()
+        try:
+            colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+            if colorbar_conf != "\n":
+                cmap = json.loads(colorbar_conf)
+                if self.run_config['plot_hist_GV']:
+                    self.hist_GV.set_cmap(cmap=cmap)
+                    self.canvas_GV.draw_idle()
+                if self.run_config['plot_hist_IV']:
+                    self.hist_IV.set_cmap(cmap=cmap)
+                    self.canvas_IV.draw_idle()
+                if self.run_config['plot_hist_IVt']:
+                    self.hist_IVt.set_cmap(cmap=cmap)
+                    self.canvas_IVt.draw_idle()
+                if self.run_config['plot_hist_GVt']:
+                    self.hist_GVt.set_cmap(cmap=cmap)
+                    self.canvas_GVt.draw_idle()
+        except Exception as E:
+            return
+        finally:
+            self.colorbar_conf.edit_modified(False)
 
     def run(self):
         match self.is_run:
@@ -1032,7 +1046,8 @@ class IVscan_GUI:
                     self.current_trace_It_Gt = tk.IntVar(self.window, value=-1)
                     self.current_lines_It = None
                     self.current_lines_Gt = None
-                    self.time_array = np.arange(full_length) / self.hist_IVt.x_conversion
+                    if self.run_config['plot_hist_IVt']: self.time_array = np.arange(full_length) / self.hist_IVt.x_conversion
+                    else: self.time_array = np.arange(full_length) / self.hist_GVt.x_conversion
                     frame_trace_It = tk.Frame(self.frame_figure)
                     frame_trace_It.grid(row=2, column=10, sticky='w') if self.run_config['plot_hist_IVt'] else frame_trace_It.grid(row=2, column=15, sticky='w')
                     tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It_Gt).pack(side='left', anchor='w')
@@ -1045,10 +1060,10 @@ class IVscan_GUI:
                     self.plot_trace_It_Gt.trace_add('write', lambda *args: show_trace_It('show' if self.plot_trace_It_Gt.get() else 'clear'))
                     self.current_trace_It_Gt.trace_add('write', lambda *args: show_trace_It('show'))
                 self.colorbar_apply()
-                self.window.update_idletasks()
-                if self.run_config['data_type'] == 'raw': self.pending = list()
                 self.status_cycles.config(text=0)
                 self.status_traces.config(text=0)
+                self.window.update_idletasks()
+                if self.run_config['data_type'] == 'raw': self.pending = list()
                 self._lock = threading.RLock()
                 threading.Thread(target=self.add_data, args=(path, )).start()
                 if isinstance(path, list): return
@@ -1092,13 +1107,13 @@ class IVscan_GUI:
 
     def add_data(self, path: str | list):
         if isinstance(path, str):
-            self.status_last_file.config(text=path, bg='yellow')
+            self.queue.put(Queue_Item(self.status_last_file.config, text=path, bg='yellow'))
             if os.path.isdir(path):
                 if not os.listdir(path):  # empty directory
-                    self.status_last_file.config(bg='lime')
+                    self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
                     return
         elif isinstance(path, list):
-            self.status_last_file.config(text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow')
+            self.queue.put(Queue_Item(self.status_last_file.config, text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow'))
         try:
             logger.debug(f'Add data: {path}')
             match self.run_config['data_type']:
@@ -1117,7 +1132,7 @@ class IVscan_GUI:
                                                          mode=self.run_config['extract_method'],
                                                          tolerance=self.run_config['tolerance'])
                     if I_full.size == 0:
-                        self.status_last_file.config(bg='lime')
+                        self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
                         return
                     else:
                         ind = np.where(V_full[-1, -1] == self.pending[-1][1])[0]
@@ -1144,7 +1159,7 @@ class IVscan_GUI:
                     self.G = np.empty((0, max_length))
         except Exception as E:
             logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
-            self.status_last_file.config(bg='red')
+            self.queue.put(Queue_Item(self.status_last_file.config, bg='red'))
             return
         else:
             if self.run_config['plot_hist_GV'] or self.run_config['plot_hist_IV']:
@@ -1152,37 +1167,36 @@ class IVscan_GUI:
                 if self.run_config['is_noise_remove']: I, V = IVscan.noise_remove(I, V, V0=self.run_config['V0'], dV=self.run_config['dV'])
                 if self.run_config['is_zeroing']: I, V = IVscan.zeroing(I, V, self.run_config['zeroing_center'])
                 if I.size == 0:
-                    self.status_last_file.config(bg='lime')
+                    self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
                     return
                 if self.run_config['direction'] == '-→+': I, V = IVscan.split_scan_direction(I, V)[0]
                 elif self.run_config['direction'] == '+→-': I, V = IVscan.split_scan_direction(I, V)[1]
                 G = IVscan.conductance(I, V if self.run_config['mode'] == 'Ebias' else self.run_config['Ebias'])
-                if self.run_config['plot_hist_IV']:
-                    self.hist_IV.add_data(I, V)
-                    self.canvas_IV.draw_idle()
-                if self.run_config['plot_hist_GV']:
-                    self.hist_GV.add_data(V=V, G=G)
-                    self.canvas_GV.draw_idle()
-                if self.current_trace_IV_GV.get() < 0: self.current_trace_IV_GV.set(self.current_trace_IV_GV.get())
                 self.I = np.vstack([self.I, I])
                 self.V = np.vstack([self.V, V])
                 self.G = np.vstack([self.G, G])
-                self.status_traces.config(text=self.I.shape[0])
+                if self.run_config['plot_hist_IV']:
+                    self.hist_IV.add_data(I, V)
+                    self.queue.put(Queue_Item(self.canvas_IV.draw_idle))
+                if self.run_config['plot_hist_GV']:
+                    self.hist_GV.add_data(V=V, G=G)
+                    self.queue.put(Queue_Item(self.canvas_GV.draw_idle))
+                if self.current_trace_IV_GV.get() < 0: self.queue.put(Queue_Item(self.current_trace_IV_GV.set, self.current_trace_IV_GV.get()))
+                self.queue.put(Queue_Item(self.status_traces.config, text=self.I.shape[0]))
             if self.run_config['plot_hist_IVt'] or self.run_config['plot_hist_GVt']:
                 G_full = IVscan.conductance(I_full, V_full if self.run_config['mode'] == 'Ebias' else self.run_config['Ebias'])
-                if self.run_config['plot_hist_IVt']:
-                    self.hist_IVt.add_data(I_full, V_full, self.time_array)
-                    self.canvas_IVt.draw_idle()
-                if self.run_config['plot_hist_GVt']:
-                    self.hist_GVt.add_data(V=V_full, G=G_full, t=self.time_array)
-                    self.canvas_GVt.draw_idle()
-                if self.current_trace_It_Gt.get() < 0: self.current_trace_It_Gt.set(self.current_trace_It_Gt.get())
                 self.I_full = np.vstack([self.I_full, I_full])
                 self.V_full = np.vstack([self.V_full, V_full])
                 self.G_full = np.vstack([self.G_full, G_full])
-                self.status_cycles.config(text=self.I_full.shape[0])
-            self.status_last_file.config(bg='lime')
-            self.window.update_idletasks()
+                if self.run_config['plot_hist_IVt']:
+                    self.hist_IVt.add_data(I_full, V_full, self.time_array)
+                    self.queue.put(Queue_Item(self.canvas_IVt.draw_idle))
+                if self.run_config['plot_hist_GVt']:
+                    self.hist_GVt.add_data(V=V_full, G=G_full, t=self.time_array)
+                    self.queue.put(Queue_Item(self.canvas_GVt.draw_idle))
+                if self.current_trace_It_Gt.get() < 0: self.queue.put(Queue_Item(self.current_trace_It_Gt.set, self.current_trace_It_Gt.get()))
+                self.queue.put(Queue_Item(self.status_cycles.config, text=self.I_full.shape[0]))
+            self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
 
     def import_setting(self):
         import yaml
@@ -1250,6 +1264,15 @@ class IVscan_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
+    def updatetk(self):
+        while not self.queue.empty():
+            try:
+                item: Queue_Item = self.queue.get()
+                item.run()
+            except Exception as E:
+                logger.warning(f'{type(E).__name__}: {E.args}')
+        self.window.after(100, self.updatetk)
+
     def cleanup(self, catagory: Literal['partial', 'all']):
         if hasattr(self, 'I'): del self.I
         if hasattr(self, 'V'): del self.V
@@ -1261,19 +1284,15 @@ class IVscan_GUI:
         if hasattr(self, 'time_array'): del self.time_array
         if hasattr(self, 'hist_IV'):
             self.hist_IV.fig.clear()
-            plt.close(self.hist_IV.fig)
             del self.hist_IV
         if hasattr(self, 'hist_GV'):
             self.hist_GV.fig.clear()
-            plt.close(self.hist_GV.fig)
             del self.hist_GV
         if hasattr(self, 'hist_IVt'):
             self.hist_IVt.fig.clear()
-            plt.close(self.hist_IVt.fig)
             del self.hist_IVt
         if hasattr(self, 'hist_GVt'):
             self.hist_GVt.fig.clear()
-            plt.close(self.hist_GVt.fig)
             del self.hist_GVt
         if catagory == 'partial':
             gc.collect()
@@ -1461,12 +1480,14 @@ class Logging_GUI(logging.Handler):
         tk.OptionMenu(buttomframe, loglevel, *['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], command=self.set_level).pack(side='left')
         tk.Button(buttomframe, text='Save', command=self.save).pack(side='left')
         tk.Button(buttomframe, text='Clear', command=self.clear).pack(side='left')
+        self.queue = Queue()
+        self.updatetk()
 
     def emit(self, record):
-        self.logtext.config(state='normal')
-        self.logtext.insert(tk.END, self.format(record) + '\n')
-        self.logtext.see(tk.END)
-        self.logtext.config(state='disabled')
+        self.queue.put(Queue_Item(self.logtext.config, state='normal'))
+        self.queue.put(Queue_Item(self.logtext.insert, tk.END, self.format(record) + '\n'))
+        self.queue.put(Queue_Item(self.logtext.see, tk.END))
+        self.queue.put(Queue_Item(self.logtext.config, state='disabled'))
 
     def set_level(self, level):
         logger.setLevel(level)
@@ -1483,6 +1504,15 @@ class Logging_GUI(logging.Handler):
         self.logtext.config(state='normal')
         self.logtext.delete('1.0', 'end')
         self.logtext.config(state='disabled')
+
+    def updatetk(self):
+        while not self.queue.empty():
+            try:
+                item: Queue_Item = self.queue.get()
+                item.run()
+            except Exception as E:
+                logger.warning(f'{type(E).__name__}: {E.args}')
+        self.window.after(100, self.updatetk)
 
     def show(self):
         self.window.deiconify()
