@@ -1,7 +1,7 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset: tuple[float, float] = (10, 10), **kwargs) -> np.ndarray:
+def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', check_size: tuple[int, int] = [10, 10], cut_point: float = None, **kwargs) -> np.ndarray:
     '''
     Extract useful data from raw_data
 
@@ -11,23 +11,24 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         upper (float): extract data greater than upper limit
         lower (float): extract data less than lower limit
         method (str): 'pull', 'crash' or 'both'
-        limit_offset (tuple): length of data in the front or end of the trace used to determine the upper/lower limit
+        check_size (list, optional): length of data in the front or end of the trace used to determine the upper/lower limit
 
     Returns:
         extracted_data (ndarray): 2D array with shape (trace, length)
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
+        if cut_point == None: cut_point = (upper * lower)**0.5
+        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > cut_point, 1, 0))), distance=length)
         if len(index):
             split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
             match method:
                 case 'pull':
-                    return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
+                    return split_trace[(split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)]
                 case 'crash':
-                    return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
+                    return split_trace[(split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1)]
                 case 'both':
-                    return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
+                    return split_trace[((split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)) | ((split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
 

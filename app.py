@@ -38,7 +38,7 @@ class Main:
     def __init__(self) -> None:
         self.window = root
         self.window.title('STM histogram')
-        self.window.protocol("WM_DELETE_WINDOW", self.stop)
+        self.window.protocol("WM_DELETE_WINDOW", sys.exit)
         self.window.resizable(False, False)
         frame = tk.Frame(self.window)
         frame.grid(row=0, column=0, sticky='nw')
@@ -110,10 +110,6 @@ class Main:
     def on_top(self):
         self.window.attributes('-topmost', self.always_on_top.get())
         self.window.update_idletasks()
-
-    def stop(self):
-        root.quit()
-        sys.exit()
 
 
 def _set_directory(var: tk.StringVar, value: str):
