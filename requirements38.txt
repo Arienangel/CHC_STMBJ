@@ -6,13 +6,14 @@ fonttools==4.47.2
 importlib-metadata==7.0.1
 importlib-resources==6.1.1
 kiwisolver==1.4.5
-matplotlib==3.7.4
+matplotlib==3.7.5
 npTDMS==1.9.0
 numpy==1.24.4
 packaging==23.2
 pandas==2.0.3
 pefile==2023.2.7
 pillow==10.2.0
+platformdirs==4.3.1
 pyinstaller==5.13.2
 pyinstaller-hooks-contrib==2023.12
 pyparsing==3.1.1
@@ -22,6 +23,8 @@ pywin32-ctypes==0.2.2
 PyYAML==6.0.1
 scipy==1.10.1
 six==1.16.0
+tomli==2.0.1
 tzdata==2023.4
 watchdog==3.0.0
+yapf==0.40.2
 zipp==3.17.0

@@ -2,16 +2,16 @@ import concurrent.futures
 import glob
 import logging
 import os
-from typing import Literal, Union
+from typing import Iterable, Literal, Union
 from zipfile import ZipFile
 
+import matplotlib.axes
 import matplotlib.colors
 import matplotlib.lines
 import matplotlib.ticker
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scipy.interpolate
 import scipy.optimize
 import scipy.signal
 from scipy.constants import physical_constants
@@ -75,7 +75,7 @@ def multi_gaussian(x: np.ndarray, *args: float):
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
 
 
-def load_data(path: Union[str, list], recursive: bool = False, max_workers: int = None, **kwargs) -> np.ndarray:
+def load_data(path: Union[str, Iterable], recursive: bool = False, max_workers: int = None, delimiter: str = '\t', transpose: bool = True, squeeze: bool = True, **kwargs) -> np.ndarray:
     """
     Load data from text files.
 
@@ -83,114 +83,140 @@ def load_data(path: Union[str, list], recursive: bool = False, max_workers: int 
         path (str): directory of files, zip file, or txt file
         recursive (bool, optional): read txt files in folder recursively
         max_workers (int, optional): maximum number of processes that can be used
+        delimiter (str, optional):  character used to separate the values
+        transpose (bool, optional): transpose row and column
+        squeeze (bool, optional): remove dimensions of length 1
 
     Returns:
         out (ndarray): Data read from the text files.
     """
+
+    def _load(path) -> list:
+        if isinstance(path, str):
+            # read all txt files in directory
+            if os.path.isdir(path):
+                files = map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False))
+                try:
+                    import datatable as dt
+                    return list(dt.iread(list(files)))
+                except ImportError:
+                    logging.info('Module datatable was not found. Use pandas instead.')
+                    return list(thread_executor.map(lambda f: pd.read_csv(f, sep=delimiter, header=None, engine='c'), files))
+            # read all txt files in zip file
+            elif path.endswith('zip'):
+                with ZipFile(path) as zf:
+                    files = list(thread_executor.map(zf.read, filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())))
+                    try:
+                        import datatable as dt
+                        return list(dt.iread(files))
+                    except ImportError:
+                        logging.info('Module datatable was not found. Use pandas instead.')
+                        import io
+                        return list(thread_executor.map(lambda f: pd.read_csv(io.BytesIO(f), sep=delimiter, header=None, engine='c'), files))
+            # read txt file
+            elif path.endswith('.txt'):
+                return [pd.read_csv(path, sep=delimiter, header=None, engine='c')]
+            # read npy file
+            elif path.endswith('.npy'):
+                return [np.load(path)]
+            # read all groups in tdms file
+            elif path.endswith('tdms'):
+                try:
+                    from nptdms import TdmsFile
+                    with TdmsFile.read(path) as f:
+                        return list(thread_executor.map(lambda g: g.as_dataframe(), f.groups()))
+                except ImportError:
+                    raise ImportError('Module nptdms was not found. TDMS files can not be read.')
+        elif isinstance(path, Iterable):
+            return sum(thread_executor.map(_load, path), start=[])
+
+    res = None
+    if isinstance(path, list):
+        if len(path) == 1: path = path[0]
     if isinstance(path, str):
-        if path.endswith('.txt'):
-            return np.loadtxt(path, unpack=True)
-        elif path.endswith('.npy'):
-            return np.load(path)
-        elif path.endswith('tdms'):
-            from nptdms import TdmsFile
-            with TdmsFile.read(path) as f:
-                return pd.concat([g.as_dataframe() for g in f.groups()], axis=0)
-        elif path.endswith('zip'):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data')
-                return executor.submit(_load_data, zipfile=path, recursive=recursive, **kwargs).result()
-        elif os.path.isdir(path):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data')
-                return executor.submit(_load_data, folder=path, recursive=recursive, **kwargs).result()
-    elif isinstance(path, list):
-        return np.concatenate(list(map(lambda path: load_data(path, recursive=recursive, max_workers=max_workers, **kwargs), path)), axis=-1)
+        if path.endswith('.txt'): res = np.array(pd.read_csv(path, sep=delimiter, header=None, engine='c'))
+        elif path.endswith('.npy'): res = np.load(path)
+    if res is None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as thread_executor:
+            logging.debug(f'Use {thread_executor._max_workers} workers in load_data')
+            res = np.concatenate(_load(path), axis=0)
+    if transpose: res = res.T
+    if squeeze: res = res.squeeze()
+    return res
 
 
-def _load_data(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> np.ndarray:
-    # use subprocess to save memory usage
-    if folder:
-        path = folder
-        files = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
-        try:
-            import datatable as dt
-            return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
-        except ImportError:
-            logging.warning('Module datatable was not found. Use pandas instead.')
-            return np.concatenate(list(map(lambda f: pd.read_csv(f, sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze(), files)), axis=-1)
-    elif zipfile:
-        path = zipfile
-        with ZipFile(path) as zf:
-            files = list(map(zf.read, filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist())))
-            try:
-                import datatable as dt
-                return dt.rbind(dt.iread(files)).to_numpy().T.squeeze()
-            except ImportError:
-                logging.warning('Module datatable was not found. Use pandas instead.')
-                import io
-                return np.concatenate(list(map(lambda f: pd.read_csv(io.BytesIO(f), sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze(), files)), axis=-1)
-
-
-def load_data_with_metadata(path: Union[str, bytes, list], recursive: bool = False, max_workers=None, **kwargs) -> pd.DataFrame:
+def load_data_with_metadata(path: Union[str, Iterable], recursive: bool = False, max_workers=None, delimiter: str = '\t', transpose: bool = True, squeeze: bool = True, **kwargs) -> pd.DataFrame:
     """
     Load data and metadata from text files.
 
     Args:
         path (str): directory of files, zip file, or txt file
         recursive (bool, optional): read txt files in folder recursively
-        max_workers (int, optional): maximum number of processes that can be used
+        max_workers (int, optional): maximum number of workers can be used
+        delimiter (str, optional):  character used to separate the values
+        transpose (bool, optional): transpose row and column
+        squeeze (bool, optional): remove dimensions of length 1 
 
     Returns:
         out (DataFrame): File path, data read from the text files and unix time.
     """
+
+    def _load(path) -> list:
+        if isinstance(path, str):
+            # read all txt files in directory
+            if os.path.isdir(path):
+                df = pd.DataFrame()
+                df['path'] = list(map(lambda f: os.path.abspath(os.path.join(path, f)), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
+                try:
+                    import datatable as dt
+                    df['data'] = pd.Series(thread_executor.map(lambda f: np.array(f), dt.iread(df['path'].to_list())))
+                except ImportError:
+                    logging.info('Module datatable was not found. Use pandas instead.')
+                    df['data'] = pd.Series(thread_executor.map(lambda f: np.array(pd.read_csv(f, sep=delimiter, header=None, engine='c')), df['path']))
+                df['time'] = df['path'].apply(os.path.getmtime)
+                return [df[['path', 'data', 'time']]]
+            # read all txt files in zip file
+            elif path.endswith('zip'):
+                with ZipFile(path) as zf:
+                    df = pd.DataFrame()
+                    df['path'] = list(filter(lambda f: f.endswith('.txt') and ('/' not in f or recursive), zf.namelist()))
+                    files = thread_executor.map(zf.read, df['path'])
+                    try:
+                        import datatable as dt
+                        df['data'] = pd.Series(thread_executor.map(lambda f: np.array(f), dt.iread(list(files))))
+                    except ImportError:
+                        logging.info('Module datatable was not found. Use pandas instead.')
+                        import io
+                        df['data'] = pd.Series(thread_executor.map(lambda f: np.array(pd.read_csv(io.BytesIO(f), sep=delimiter, header=None, engine='c')), files))
+                    df['time'] = df['path'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
+                return [df[['path', 'data', 'time']]]
+            # read txt file
+            elif path.endswith('.txt'):
+                return [pd.DataFrame([[os.path.abspath(path), np.array(pd.read_csv(path, sep=delimiter, header=None, engine='c')), os.path.getmtime(path)]], columns=['path', 'data', 'time'])]
+            # read all groups in tdms file
+            elif path.endswith('tdms'):
+                try:
+                    from nptdms import TdmsFile
+                    with TdmsFile.read(path) as f:
+                        return list(thread_executor.map(lambda g: pd.DataFrame([[g.name, np.array(g.as_dataframe()), g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']), f.groups()))
+                except ImportError:
+                    raise ImportError('Module nptdms was not found. TDMS files can not be read.')
+        elif isinstance(path, Iterable):
+            return sum(thread_executor.map(_load, path), start=[])
+
+    res = None
+    if isinstance(path, list):
+        if len(path) == 1: path = path[0]
     if isinstance(path, str):
-        if path.endswith('.txt'):
-            return pd.DataFrame([[path, np.loadtxt(path, unpack=True), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
-        elif path.endswith('.tdms'):
-            from nptdms import TdmsFile
-            with TdmsFile.read(path) as f:
-                return pd.concat([pd.DataFrame([[g.name, g.as_dataframe().values.T, g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']) for g in f.groups()], axis=0)
-        elif path.endswith('zip'):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data_with_metadata')
-                return executor.submit(_load_data_with_metadata, zipfile=path, recursive=recursive, **kwargs).result()
-        elif os.path.isdir(path):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                logging.debug(f'Use {max_workers} processes in load_data_with_metadata')
-                return executor.submit(_load_data_with_metadata, folder=path, recursive=recursive, **kwargs).result()
-    elif isinstance(path, list):
-        return pd.concat(map(lambda path: load_data_with_metadata(path, recursive, max_workers, **kwargs), path), axis=0)
-
-
-def _load_data_with_metadata(folder: str = None, zipfile: str = None, recursive: bool = False, **kwargs) -> pd.DataFrame:
-    # use subprocess to save memory usage
-    if folder:
-        path = folder
-        df = pd.DataFrame()
-        df['path'] = list(map(lambda f: os.path.join(path, f), glob.glob(os.path.join(path, '**/*.txt'), recursive=True) if recursive else glob.glob(os.path.join(path, '*.txt'), recursive=False)))
-        try:
-            import datatable as dt
-            df['data'] = df['path'].apply(lambda f: dt.fread(f).to_numpy().T.squeeze())
-        except ImportError:
-            logging.warning('Module datatable was not found. Use pandas instead.')
-            df['data'] = df['path'].apply(lambda f: pd.read_csv(f, sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze())
-        df['time'] = df['path'].apply(os.path.getmtime)
-        return df[['path', 'data', 'time']]
-    elif zipfile:
-        path = zipfile
-        df = pd.DataFrame()
-        with ZipFile(path) as zf:
-            df['path'] = list(filter(lambda file: file.endswith('.txt') and ('/' not in file or recursive), zf.namelist()))
-            try:
-                import datatable as dt
-                df['data'] = df['path'].apply(lambda f: dt.fread(zf.read(f)).to_numpy().T.squeeze())
-            except ImportError:
-                logging.warning('Module datatable was not found. Use pandas instead.')
-                import io
-                df['data'] = df['path'].apply(lambda f: pd.read_csv(io.BytesIO(zf.read(f)), sep=r",|;|\s+", dtype=np.float64, header=None).values.T.squeeze())
-            df['time'] = df['path'].apply(lambda f: pd.Timestamp(*zf.getinfo(f).date_time).timestamp())
-        return df[['path', 'data', 'time']]
+        if path.endswith('.txt'): res = pd.DataFrame([[os.path.abspath(path), np.array(pd.read_csv(path, sep=delimiter, header=None, engine='c')), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
+    if res is None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as thread_executor:
+            logging.debug(f'Use {thread_executor._max_workers} workers in load_data')
+            res = pd.concat(_load(path), axis=0)
+    if transpose: res['data'] = res['data'].apply(np.transpose)
+    if squeeze: res['data'] = res['data'].apply(np.squeeze)
+    res.reset_index(drop=True, inplace=True)
+    return res
 
 
 class Hist1D:
@@ -211,13 +237,14 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple, num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple, num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
         self.xscale = xscale
-        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        if fig: self.fig, self.ax = fig, ax
+        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
@@ -237,7 +264,7 @@ class Hist1D:
             x (ndarray): 2D array with shape (trace, length)
             set_ylim (bool, optional): set largest y as y max
         """
-        self.trace = self.trace + x.shape[0]
+        self.trace = self.trace + x.shape[0] if x.ndim == 2 else self.trace + 1
         self.height = self.height + np.histogram(x, self.x_bins)[0]
         height_per_trace = self.height_per_trace
         self.plot.set_data(height_per_trace)
@@ -303,7 +330,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple, ylim: tuple, num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple, ylim: tuple, num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
@@ -311,7 +338,8 @@ class Hist2D:
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale
-        self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        if fig: self.fig, self.ax = fig, ax
+        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)

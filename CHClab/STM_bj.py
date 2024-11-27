@@ -1,7 +1,7 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', offset: tuple = (10, 10), **kwargs) -> np.ndarray:
+def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upper: float = 3.2, lower: float = 1e-6, method: Literal['pull', 'crash', 'both'] = 'pull', check_size: tuple = [10, 10], cut_point: float = None, **kwargs) -> np.ndarray:
     '''
     Extract useful data from raw_data
 
@@ -11,22 +11,23 @@ def extract_data(raw_data: Union[np.ndarray, str, list], length: int = 1000, upp
         upper (float): extract data greater than upper limit
         lower (float): extract data less than lower limit
         method (str): 'pull', 'crash' or 'both'
-        limit_offset (tuple): length of data in the front or end of the trace used to determine the upper/lower limit
+        check_size (list, optional): length of data in the front or end of the trace used to determine the upper/lower limit
 
     Returns:
         extracted_data (ndarray): 2D array with shape (trace, length)
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
-        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > (upper * lower)**0.5, 1, 0))), distance=length)
+        if cut_point == None: cut_point = (upper * lower)**0.5
+        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > cut_point, 1, 0))), distance=length)
         if len(index):
             split_trace = np.stack([raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
             if method == 'pull':
-                return split_trace[(split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)]
+                return split_trace[(split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)]
             elif method == 'crash':
-                return split_trace[(split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1)]
+                return split_trace[(split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1)]
             elif method == 'both':
-                return split_trace[((split_trace[:, :offset[0]] > upper).any(axis=1) & (split_trace[:, -offset[1]:] < lower).any(axis=1)) | ((split_trace[:, :offset[0]] < lower).any(axis=1) & (split_trace[:, -offset[1]:] > upper).any(axis=1))]
+                return split_trace[((split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)) | ((split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1))]
     return np.empty((0, length))
 
 
@@ -42,6 +43,7 @@ def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float
     Returns:
         X (ndarray): 2D X array with shape (trace, length)
     """
+    if G.ndim == 1: G = np.expand_dims(G, 0)
     is_pull = G[:, 0] > G[:, -1]
     _, X = np.mgrid[:G.shape[0], :G.shape[-1]]
     row, col = np.where(((G[:, :-1] > zero_point) & (G[:, 1:] < zero_point) & np.expand_dims(is_pull, axis=-1)) | ((G[:, :-1] < zero_point) & (G[:, 1:] > zero_point) & np.expand_dims(~is_pull, axis=-1)))
@@ -73,11 +75,6 @@ class Hist_G(Hist1D):
             G (ndarray): 2D array with shape (trace, length)
         """
         super().add_data(G, **kwargs)
-        '''peak, *_ = scipy.signal.find_peaks(height_per_trace, prominence=0.1)
-        peak_position = self.bins[peak], height_per_trace[peak]
-        self.ax.plot(*peak_position, 'xr')
-        for i, j in zip(*peak_position):
-            self.ax.annotate(f'{i:1.2E}', xy=(i, j+0.02), ha='center', fontsize=8)'''
 
 
 class Hist_GS(Hist2D):
@@ -124,14 +121,16 @@ class Hist_Gt(Hist2D):
         with np.errstate(invalid='ignore', divide='ignore'):
             return np.nan_to_num(np.divide(self.height, np.expand_dims(self.trace, axis=1)))
 
-    def add_data(self, t: np.ndarray, G: np.ndarray, set_clim: bool = True, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, t: np.ndarray = None, set_clim: bool = True, *, interval: float = 0.5, **kwargs) -> None:
         """
         Add data into 2D histogram
 
         Args:
-            t (ndarray): 1D time array with shape (trace)
             G (ndarray): 2D G array with shape (trace, length)
+            t (ndarray): 1D time array with shape (trace)
+            interval (float, optional): time interval between each trace
         """
+        if t is None: t = np.arange(G.shape[0]) * interval
         self.trace = self.trace + np.histogram(t, self.x_bins)[0]
         self.height = self.height + np.histogram2d(np.tile(t, (G.shape[1], 1)).T.ravel(), G.ravel(), (self.x_bins, self.y_bins))[0]
         height_per_trace = self.height_per_trace
