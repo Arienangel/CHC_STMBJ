@@ -133,7 +133,7 @@ class Hist_GV(Hist2D):
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
         self.ax.set_ylabel('Conductance ($G/G_0$)')
-        self.colorbar.set_label('Count/trace')
+        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
         self.xlabel = xlabel
 
     def add_data(self, I: np.ndarray = None, V: np.ndarray = None, *, G: np.ndarray = None, Vbias: float | np.ndarray = None, **kwargs) -> None:
@@ -158,7 +158,7 @@ class Hist_IV(Hist2D):
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
         self.ax.set_ylabel('Current (A)')
-        self.colorbar.set_label('Count/trace')
+        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
 
     def add_data(self, I: np.ndarray, V: np.ndarray, **kwargs) -> None:
         """

@@ -243,7 +243,7 @@ class Hist1D:
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
         self.xscale = xscale
-        if fig: self.fig, self.ax = fig, ax
+        if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
@@ -256,7 +256,7 @@ class Hist1D:
         """ndarray: histogram height divided by number of traces"""
         return self.height / self.trace
 
-    def add_data(self, x: np.ndarray, set_ylim: bool = True, **kwargs) -> None:
+    def add_data(self, x: np.ndarray, set_ylim: bool = True, trace: int=None, **kwargs) -> None:
         """
         Add data into histogram
 
@@ -264,7 +264,8 @@ class Hist1D:
             x (ndarray): 2D array with shape (trace, length)
             set_ylim (bool, optional): set largest y as y max
         """
-        self.trace = self.trace + x.shape[0] if x.ndim == 2 else self.trace + 1
+        if trace is None: trace=x.shape[0] if x.ndim == 2 else 1
+        self.trace = self.trace + trace
         self.height = self.height + np.histogram(x, self.x_bins)[0]
         height_per_trace = self.height_per_trace
         self.plot.set_data(height_per_trace)
@@ -330,7 +331,7 @@ class Hist2D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, set_colorbar: bool=True, **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
@@ -338,14 +339,14 @@ class Hist2D:
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale
-        if fig: self.fig, self.ax = fig, ax
+        if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)
         self.ax.set_xscale(xscale)
         self.ax.set_yscale(yscale)
-        self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
+        if set_colorbar: self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
         self.y = np.sqrt(self.y_bins[1:] * self.y_bins[:-1]) if yscale == 'log' else (self.y_bins[1:] + self.y_bins[:-1]) / 2
 

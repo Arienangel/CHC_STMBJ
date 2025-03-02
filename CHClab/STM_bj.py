@@ -93,7 +93,7 @@ class Hist_GS(Hist2D):
         super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('Displacement (nm)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
-        self.colorbar.set_label('Count/trace')
+        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
         self.zero_point = zero_point
         self.x_conversion = x_conversion
 
@@ -120,7 +120,7 @@ class Hist_Gt(Hist2D):
         super().__init__(xlim, ylim, int(np.abs(xlim[1] - xlim[0]) // size_x_bin), num_y_bin, xscale, yscale, **kwargs)
         self.ax.set_xlabel('Time (min)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
-        self.colorbar.set_label('Count/trace')
+        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
         self.trace = np.zeros(self.x.size)
         self.ax.set_xticks(np.arange(0, self.x_max, 600), np.arange(0, self.x_max / 60, 10, dtype=int))
         self.ax.set_xticks(np.arange(0, self.x_max, 60), minor=True)
