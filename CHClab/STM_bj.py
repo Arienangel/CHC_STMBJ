@@ -97,7 +97,7 @@ class Hist_GS(Hist2D):
         self.zero_point = zero_point
         self.x_conversion = x_conversion
 
-    def add_data(self, G: np.ndarray, X: np.ndarray = None, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, X: np.ndarray = None, zero_point: float = None, **kwargs) -> None:
         """
         Add data into 2D histogram (GS)
 
@@ -109,7 +109,7 @@ class Hist_GS(Hist2D):
             X (ndarray): 2D X array with shape (trace, length)
         """
         if X is None:
-            X = get_displacement(G, zero_point=self.zero_point, x_conversion=self.x_conversion)
+            X = get_displacement(G, zero_point=zero_point or self.zero_point, x_conversion=self.x_conversion)
         super().add_data(X, G, **kwargs)
         return X
 

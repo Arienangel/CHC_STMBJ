@@ -11,41 +11,69 @@
   "G max": 3.16
   "G #bins": 550
   "G scale": "log" # linear log
-  "X min": -0.4
-  "X max": 0.6
-  "X #bins": 1000
+  "X min": -0.5
+  "X max": 1.0
+  "X #bins": 300
   "X scale": "linear" # linear log
+  "t min": 0.0
+  "t max": 3600.0
+  "t bin size": 30
+  "t scale": "linear" # linear log
+  "hist_G": true
+  "hist_GS": true
+  "hist_Gt": false
+  "hist_2DCH": false
   "Colorbar":
     "{\"red\":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n\
     \ \"green\":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n \"\
     blue\": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}"
 
-"I-Ebias":
+"IVscan":
   "Data type": "raw" # raw, cut
   "Recursive": false # true, false
-  "#Segments": 4
-  "#Files": 10
-  "V upper": 1.45
-  "Length": 1200
+  "Mode": "Ebias"
+  "Ebias": 0.05
   "I unit": 1.0e-6
-  "V unit": 1
-  "I min@V<": 0.1
+  "V unit": 1.0
+  "points_per_file": 40000
+  "Sampling rate": 40000
+  "#Segments": 4
+  "V upper": 0.95
+  "V lower": -0.95
+  "Length": 800
+  "Tolerance": 0
+  "Offset0": 800
+  "Offset1": 800
+  "Extract_method": "height"
   "I limit": 1.0e-5
+  "Noise remove": true # true, false
+  "V0": 0.0
+  "dV": 0.1
   "Zeroing": true # true, false
+  "Zeroing center": 0.0
   "Direction": "both" # both, -→+, +→-
-  "V min": -1.5
-  "V max": 1.5
-  "V #bins": 300
+  "V min": -1.0
+  "V max": 1.0
+  "V #bins": 200
   "V scale": "linear"
   "G min": 1.0e-5
   "G max": 0.1
-  "G #bins": 400
+  "G #bins": 200
   "G scale": "log"
-  "I min": 1.0e-11
-  "I max": 1.0e-5
-  "I #bins": 600
+  "I min": 1.0e-5
+  "I max": 1.0e-11
+  "I #bins": 300
   "I scale": "log"
+  "t min": 0.18
+  "t max": 0.0
+  "t #bins": 1800
+  "t scale": "linear"
+  "hist_IV": true
+  "hist_GV": true
+  "hist_IVt": false
+  "hist_GVt": false
   "Colorbar":
     "{\"red\":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n\
     \ \"green\":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n \"\
     blue\": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}"
+    

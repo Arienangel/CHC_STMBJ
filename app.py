@@ -237,6 +237,9 @@ class STM_bj_GUI:
         self.status_last_file.pack(side='left')
         self.queue = Queue()
         self.updatetk()
+        if ini_config:
+            if 'IVscan' in ini_config:
+                self.import_setting(ini_config['STM-bj'])
 
     def colorbar_apply(self, *args):
         try:
@@ -459,12 +462,13 @@ class STM_bj_GUI:
             self.queue.put(Queue_Item(self.status_traces.config, text=self.G.shape[0]))
         self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
 
-    def import_setting(self):
-        import yaml
-        path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
-        if not path: return
-        with open(path, mode='r', encoding='utf-8') as f:
-            data = yaml.load(f.read(), yaml.SafeLoader)['STM-bj']
+    def import_setting(self, data: dict = None):
+        if not data:
+            path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+            if not path: return
+            import yaml
+            with open(path, mode='r', encoding='utf-8') as f:
+                data = yaml.load(f.read(), yaml.SafeLoader)['STM-bj']
         settings = {
             'Data type': self.is_raw,
             'Recursive': self.directory_recursive,
@@ -852,6 +856,9 @@ class IVscan_GUI:
         self.status_last_file.pack(side='left', anchor='w')
         self.queue = Queue()
         self.updatetk()
+        if ini_config:
+            if 'IVscan' in ini_config:
+                self.import_setting(ini_config['IVscan'])
 
     def colorbar_apply(self, *args):
         try:
@@ -1194,12 +1201,13 @@ class IVscan_GUI:
                 self.queue.put(Queue_Item(self.status_cycles.config, text=self.I_full.shape[0]))
             self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
 
-    def import_setting(self):
-        import yaml
-        path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
-        if not path: return
-        with open(path, mode='r', encoding='utf-8') as f:
-            data = yaml.load(f.read(), yaml.SafeLoader)['IVscan']
+    def import_setting(self, data: dict = None):
+        if not data:
+            path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+            if not path: return
+            import yaml
+            with open(path, mode='r', encoding='utf-8') as f:
+                data = yaml.load(f.read(), yaml.SafeLoader)['IVscan']
         settings = {
             'Data type': self.is_raw,
             'Recursive': self.directory_recursive,
@@ -1533,5 +1541,15 @@ if __name__ == '__main__':
     logger = logging.getLogger('App')
     logger.addHandler(handler)
     logger.setLevel(loglevel.get())
+    try:
+        import yaml
+        ini_config = os.path.join(os.getcwd(), 'config.yaml')
+        if os.path.exists(ini_config):
+            with open(ini_config, mode='r', encoding='utf-8') as f:
+                ini_config = yaml.load(f.read(), yaml.SafeLoader)
+        else:
+            ini_config = None
+    except ImportError:
+        logger.warning('Module PyYAML was not found. Import/export settings can not be used.')
     GUI = Main()
     tk.mainloop()

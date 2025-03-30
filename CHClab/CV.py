@@ -14,22 +14,15 @@ class Segment:
         I = np.concatenate([s.I for s in segment])
         return Segment(V, I)
 
+    def plot(self, *args, **kwargs):
+        plot = PlotCV(xlim=(self.V.min() - 0.1, self.V.max() + 0.1))
+        plot.add_segment(self, *args, **kwargs)
+        return plot
+
 
 class CVdata:
 
-    def __init__(self,
-                 V: np.ndarray,
-                 I: np.ndarray,
-                 Vinit: float = None,
-                 Vmax: float = None,
-                 Vmin: float = None,
-                 Vfinal: float = None,
-                 polarity: bool = None,
-                 scan_rate: float = None,
-                 num_segment: int = None,
-                 interval: float = None,
-                 quiet_time: float = None,
-                 sensitivity: float = None):
+    def __init__(self, V: np.ndarray, I: np.ndarray, Vinit: float = None, Vmax: float = None, Vmin: float = None, Vfinal: float = None, polarity: bool = None, scan_rate: float = None, num_segment: int = None, interval: float = None, quiet_time: float = None, sensitivity: float = None):
         self.V = V
         self.I = I
         self.fullcycle = Segment(V, I)
@@ -71,17 +64,20 @@ class CVdata:
         sensitivity = float(re.search(r"Sensitivity \(A/V\) = (.*)\n", data).group(1))
         return CVdata(V, I, Vinit, Vmax, Vmin, Vfinal, polarity, scan_rate, num_segment, interval, quiet_time, sensitivity)
 
-    def __getitem__(self, segment_index: Union[int, slice, tuple]):
-        if isinstance(segment_index, tuple): return [self.segment[i] for i in segment_index]
+    def __getitem__(self, segment_index: Union[int, slice, Iterable]):
+        if isinstance(segment_index, Iterable): return [self.segment[i] for i in segment_index]
         else: return self.segment[segment_index]
 
-    def plot(self, segment_index: Union[int, list[int]] = None, set_legend: bool = False, *args, **kwargs):
-        plot = PlotCV(xlim=(self.Vmin - 0.1, self.Vmax + 0.1))
+    def plot(self, segment_index: Union[int, list[int]] = None, split_segment: bool = False, set_legend: bool = False, plot=None, *args, **kwargs):
+        plot = plot or PlotCV(xlim=(self.Vmin - 0.1, self.Vmax + 0.1))
         if segment_index is None: plot.add_segment(self.fullcycle, *args, **kwargs)
         else:
-            for i in segment_index:
-                plot.add_segment(self[i], label=i+1, *args, **kwargs)
-            if set_legend: plot.ax.legend()
+            if split_segment:
+                for i in segment_index:
+                    plot.add_segment(self[i], label=i + 1, *args, **kwargs)
+                if set_legend: plot.ax.legend()
+            else:
+                plot.add_segment(Segment.concat(self[segment_index]))
         return plot
 
 
@@ -108,13 +104,7 @@ class OCPdata:
 
 class PlotCV:
 
-    def __init__(self,
-                 *,
-                 fig: plt.Figure = None,
-                 ax: matplotlib.axes.Axes = None,
-                 figsize: tuple = None,
-                 prop_cycle: list = None,
-                 **kwargs):
+    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, prop_cycle: list = None, **kwargs):
 
         if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
@@ -126,7 +116,7 @@ class PlotCV:
     def add_data(self, x: np.ndarray, y: np.ndarray, *args, **kwargs):
         self.ax.plot(x, y, *args, **kwargs)
 
-    def add_segment(self, segment: Union[CVdata, Segment, list], *args, **kwargs):
-        if not isinstance(segment, list): segment=[segment]
+    def add_segment(self, segment: Union[CVdata, Segment, Iterable], *args, **kwargs):
+        if not isinstance(segment, Iterable): segment = [segment]
         for s in segment:
             self.add_data(s.V, s.I, *args, **kwargs)
