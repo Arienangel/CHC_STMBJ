@@ -22,7 +22,19 @@ class Segment:
 
 class CVdata:
 
-    def __init__(self, V: np.ndarray, I: np.ndarray, Vinit: float = None, Vmax: float = None, Vmin: float = None, Vfinal: float = None, polarity: bool = None, scan_rate: float = None, num_segment: int = None, interval: float = None, quiet_time: float = None, sensitivity: float = None):
+    def __init__(self,
+                 V: np.ndarray,
+                 I: np.ndarray,
+                 Vinit: float = None,
+                 Vmax: float = None,
+                 Vmin: float = None,
+                 Vfinal: float = None,
+                 polarity: bool = None,
+                 scan_rate: float = None,
+                 num_segment: int = None,
+                 interval: float = None,
+                 quiet_time: float = None,
+                 sensitivity: float = None):
         self.V = V
         self.I = I
         self.fullcycle = Segment(V, I)
@@ -37,7 +49,7 @@ class CVdata:
         self.polarity = polarity or (V[1] - V[0]) > 0
         self.scan_rate = scan_rate
         self.num_segment = num_segment or len(Vsegment)
-        self.interval = interval or np.abs((V[1] - V[0]))
+        self.interval = interval or np.abs((self.V[1:] - self.V[:-1]).mean())
         self.quiet_time = quiet_time
         self.sensitivity = sensitivity
 
@@ -48,7 +60,13 @@ class CVdata:
                 data = f.read()
         else:
             data = string
-        V, I = np.genfromtxt(io.StringIO(re.search(r"Potential/V, Current/A\n\n((.|\n)*)\n", data).group(1)), delimiter=', ', unpack=True)
+        if r"Potential/V, Current/A" in data:
+            V, I = np.genfromtxt(io.StringIO(re.search(r"Potential/V, Current/A\n\n((.|\n)*)\n", data).group(1)), delimiter=', ', unpack=True)
+        elif r"Potential/V, i1/A, i2/A" in data:
+            V, I1, I2 = np.genfromtxt(io.StringIO(re.search(r"Potential/V, i1/A, i2/A\n\n((.|\n)*)\n", data).group(1)), delimiter=', ', unpack=True)
+            I = np.stack([I1, I2]).T
+        else:
+            raise ValueError('Unknown format')
         Vinit = float(re.search(r"Init E \(V\) = (.*)\n", data).group(1))
         Vmax = float(re.search(r"High E \(V\) = (.*)\n", data).group(1))
         Vmin = float(re.search(r"Low E \(V\) = (.*)\n", data).group(1))
@@ -77,7 +95,7 @@ class CVdata:
                     plot.add_segment(self[i], label=i + 1, *args, **kwargs)
                 if set_legend: plot.ax.legend()
             else:
-                plot.add_segment(Segment.concat(self[segment_index]))
+                plot.add_segment(Segment.concat(self[segment_index]), *args, **kwargs)
         return plot
 
 
