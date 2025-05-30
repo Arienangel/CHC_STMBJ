@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 
-from CHClab import IVscan, STM_bj
+from CHClab import CV, IVscan, STM_bj
 
 
 class Queue_Item:
@@ -44,7 +44,7 @@ class Main:
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
         self.option = tk.StringVar(self.window, value='Select')
-        tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan'], command=self.new_tab).pack(side='left')
+        tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan', 'CV'], command=self.new_tab).pack(side='left')
         self.CPU_threads = tk.IntVar(self.window, value=multiprocessing.cpu_count())
         self.always_on_top = tk.BooleanVar(self.window, value=False)
         tk.Label(frame, text='CPU threads: ').pack(side='left')
@@ -75,6 +75,11 @@ class Main:
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
                 tab.gui_object = IVscan_GUI(tab)
+            case 'CV':
+                tab = ttk.Frame(self.tabcontrol)
+                self.tabcontrol.add(tab, text=name)
+                self.tabcontrol.select(tab)
+                tab.gui_object = CV_GUI(tab)
 
     def tab_rename_start(self, *args):
         try:
@@ -1466,6 +1471,74 @@ class IVscan_export_prompt:
                         data = yaml.dump({'IVscan': data}, f, yaml.SafeDumper)
         self.hide()
 
+
+class CV_GUI:
+
+    def __init__(self, root: tk.Frame) -> None:
+        self.window = root
+        # config frame
+        self.frame_config = tk.Frame(self.window)
+        self.frame_config.pack(side='top', anchor='w')
+        # row 0
+        self.directory_path = tk.StringVar(self.window)
+        tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
+        tk.Entry(self.frame_config, textvariable=self.directory_path, width=40).grid(row=0, column=1, columnspan=4)
+        tk.Button(self.frame_config, text="File", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askopenfilename())).grid(row=0, column=6, padx=10)
+        # row 1
+        self.I_unit = tk.DoubleVar(self.window, value=-1e-6)
+        self.V_unit = tk.DoubleVar(self.window, value=1)
+        tk.Label(self.frame_config, text='Units (I, V): ').grid(row=1, column=0)
+        frame_units = tk.Frame(self.frame_config)
+        frame_units.grid(row=1, column=1)
+        tk.Entry(frame_units, textvariable=self.I_unit, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_units, textvariable=self.V_unit, justify='center', width=10).pack(side='left')
+        self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
+        self.run_button.grid(row=1, column=6)
+        # figure frame
+        self.frame_figure = tk.Frame(self.window)
+        self.frame_figure.pack(side='top', anchor='w')
+        self.frame_figure.columnconfigure([0, 5, 10, 15], weight=1)
+        self.frame_figure.rowconfigure([0], weight=1)
+        self.queue = Queue()
+        self.updatetk()
+
+    def run(self):
+        self.cleanup('partial')
+        path = self.directory_path.get()
+        for item in self.frame_figure.winfo_children():
+            item.destroy()
+        gc.collect()
+        self.plot_CV = CV.PlotCV()
+        self.canvas_CV = FigureCanvasTkAgg(self.plot_CV.fig, self.frame_figure)
+        self.canvas_CV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+        self.navtool_CV = NavigationToolbar2Tk(self.canvas_CV, self.frame_figure, pack_toolbar=False)
+        self.navtool_CV.grid(row=1, column=0, columnspan=4, sticky='w')
+        self.canvas_CV.draw_idle()
+        self.window.update_idletasks()
+        self.V, self.I = np.loadtxt(path, unpack=True) * [[self.V_unit.get()], [self.I_unit.get()]]
+        self.plot_CV.add_segment(CV.CVdata(self.V, self.I))
+        self.queue.put(Queue_Item(self.canvas_CV.draw_idle))
+
+    def updatetk(self):
+        while not self.queue.empty():
+            try:
+                item: Queue_Item = self.queue.get()
+                item.run()
+            except Exception as E:
+                logger.warning(f'{type(E).__name__}: {E.args}')
+        self.window.after(100, self.updatetk)
+
+    def cleanup(self, catagory: Literal['partial', 'all']):
+        if hasattr(self, 'I'): del self.I
+        if hasattr(self, 'V'): del self.V
+        if hasattr(self, 'plot_CV'):
+            self.plot_CV.fig.clear()
+            del self.plot_CV
+        if catagory == 'partial':
+            gc.collect()
+            return
+        else:
+            self.window.destroy()
 
 class Logging_GUI(logging.Handler):
 
