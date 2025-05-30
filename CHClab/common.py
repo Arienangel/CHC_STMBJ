@@ -8,10 +8,12 @@ from zipfile import ZipFile
 import matplotlib.axes
 import matplotlib.colors
 import matplotlib.lines
-import matplotlib.ticker
 import matplotlib.pyplot as plt
+import matplotlib.ticker
 import numpy as np
 import pandas as pd
+import scipy.fft
+import scipy.integrate
 import scipy.optimize
 import scipy.signal
 from scipy.constants import physical_constants
@@ -237,7 +239,7 @@ class Hist1D:
         plot (StepPatch): 1D histogram container
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, **kwargs) -> None:
+    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, set_grid:bool=True, **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
@@ -248,7 +250,7 @@ class Hist1D:
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
-        self.ax.grid(visible=True, which='major')
+        if set_grid: self.ax.grid(visible=True, which='major')
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
 
     @property
