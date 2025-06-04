@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
 import pandas as pd
-import scipy.fft
-import scipy.integrate
 import scipy.optimize
 import scipy.signal
 from scipy.constants import physical_constants
@@ -75,6 +73,21 @@ def multi_gaussian(x: np.ndarray, *args: float):
         x (ndarray): output value
     """
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
+
+
+def get_correlation_matrix(A: np.ndarray, bins: np.ndarray) -> np.ndarray:
+    """
+    Get correlation coefficient matrix
+
+    Args:
+        A (np.ndarray): 2D array with shape (trace, length)
+        bins (np.ndarray): bins used in np.histogram
+
+    Returns:
+        ndarray: correlation coefficient matrix
+    """
+    hist = np.apply_along_axis(lambda i: np.histogram(i, bins)[0], 1, A)
+    return np.corrcoef(hist, rowvar=False)
 
 
 def load_data(path: Union[str, Iterable], recursive: bool = False, max_workers: int = None, delimiter: str = '\t', transpose: bool = True, squeeze: bool = True, **kwargs) -> np.ndarray:
@@ -168,7 +181,9 @@ def load_data_with_metadata(path: Union[str, Iterable], recursive: bool = False,
             # read all txt files in directory
             if os.path.isdir(path):
                 df = pd.DataFrame()
-                df['path'] = list(map(lambda f: os.path.abspath(os.path.join(path, f)), glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
+                df['path'] = list(
+                    map(lambda f: os.path.abspath(os.path.join(path, f)),
+                        glob.glob('**/*.txt', root_dir=path, recursive=True) if recursive else glob.glob('*.txt', root_dir=path, recursive=False)))
                 try:
                     import datatable as dt
                     df['data'] = pd.Series(thread_executor.map(lambda f: np.array(f), dt.iread(df['path'].to_list())))
@@ -200,7 +215,9 @@ def load_data_with_metadata(path: Union[str, Iterable], recursive: bool = False,
                 try:
                     from nptdms import TdmsFile
                     with TdmsFile.read(path) as f:
-                        return list(thread_executor.map(lambda g: pd.DataFrame([[g.name, np.array(g.as_dataframe()), g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']), f.groups()))
+                        return list(
+                            thread_executor.map(lambda g: pd.DataFrame([[g.name, np.array(g.as_dataframe()), g.channels()[0].properties['wf_start_time']]], columns=['path', 'data', 'time']),
+                                                f.groups()))
                 except ImportError:
                     raise ImportError('Module nptdms was not found. TDMS files can not be read.')
         elif isinstance(path, Iterable):
@@ -210,7 +227,8 @@ def load_data_with_metadata(path: Union[str, Iterable], recursive: bool = False,
     if isinstance(path, list):
         if len(path) == 1: path = path[0]
     if isinstance(path, str):
-        if path.endswith('.txt'): res = pd.DataFrame([[os.path.abspath(path), np.array(pd.read_csv(path, sep=delimiter, header=None, engine='c')), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
+        if path.endswith('.txt'):
+            res = pd.DataFrame([[os.path.abspath(path), np.array(pd.read_csv(path, sep=delimiter, header=None, engine='c')), os.path.getmtime(path)]], columns=['path', 'data', 'time'])
     if res is None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as thread_executor:
             logging.debug(f'Use {thread_executor._max_workers} workers in load_data')
@@ -229,6 +247,7 @@ class Hist1D:
         xlim (tuple): max and min value of x
         num_bin (float): number of bins
         x_scale (str): linear or log scale of x axis
+        subplots_kw (dict, optional): plt.subplots kwargs
 
     Attributes:
         trace (int): number of traces
@@ -236,17 +255,27 @@ class Hist1D:
         height (ndarray): height of the histogram
         fig (Figure): plt.Figure object
         ax (Axes): plt.Axes object
-        plot (StepPatch): 1D histogram container
+        plot (StepPatch): plt.stairs object
     """
 
-    def __init__(self, xlim: tuple[float, float], num_x_bin: int, xscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, set_grid:bool=True, **kwargs) -> None:
+    def __init__(self,
+                 xlim: tuple[float, float],
+                 num_x_bins: int,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 *,
+                 fig: plt.Figure = None,
+                 ax: matplotlib.axes.Axes = None,
+                 subplots_kw: tuple = None,
+                 set_grid: bool = True,
+                 **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
-        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
+        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bins + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bins +
+                                                                                                                 1) if xscale == 'log' else None
         self.height, *_ = np.histogram([], self.x_bins)
         self.trace = 0
         self.xscale = xscale
         if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_xscale(xscale)
@@ -258,15 +287,16 @@ class Hist1D:
         """ndarray: histogram height divided by number of traces"""
         return self.height / self.trace
 
-    def add_data(self, x: np.ndarray, set_ylim: bool = True, trace: int=None, **kwargs) -> None:
+    def add_data(self, x: np.ndarray, set_ylim: bool = True, trace: int = None, **kwargs) -> None:
         """
         Add data into histogram
 
         Args:
             x (ndarray): 2D array with shape (trace, length)
             set_ylim (bool, optional): set largest y as y max
+            trace (int, optional): set custom #trace
         """
-        if trace is None: trace=x.shape[0] if x.ndim == 2 else 1
+        if trace is None: trace = x.shape[0] if x.ndim == 2 else 1
         self.trace = self.trace + trace
         self.height = self.height + np.histogram(x, self.x_bins)[0]
         height_per_trace = self.height_per_trace
@@ -322,6 +352,7 @@ class Hist2D:
         num_y_bin (float): number of y bins
         xscale (str): linear or log scale of x axis
         yscale (str): linear or log scale of y axis
+        subplots_kw (dict, optional): plt.subplots kwargs
 
     Attributes:
         trace (int): number of traces
@@ -330,19 +361,33 @@ class Hist2D:
         height (ndarray): height of the histogram
         fig (Figure): plt.Figure object
         ax (Axes): plt.Axes object
-        plot (StepPatch): 1D histogram container
+        plot (QuadMesh): plt.pcolormesh object
     """
 
-    def __init__(self, xlim: tuple[float, float], ylim: tuple[float, float], num_x_bin: int, num_y_bin: int, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'linear', *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, set_colorbar: bool=True, **kwargs) -> None:
+    def __init__(self,
+                 xlim: tuple[float, float],
+                 ylim: tuple[float, float],
+                 num_x_bins: int,
+                 num_y_bins: int,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 yscale: Literal['linear', 'log'] = 'linear',
+                 *,
+                 fig: plt.Figure = None,
+                 ax: matplotlib.axes.Axes = None,
+                 subplots_kw: tuple = None,
+                 set_colorbar: bool = True,
+                 **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
-        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bin + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bin + 1) if xscale == 'log' else None
-        self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bin + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bin + 1) if yscale == 'log' else None
+        self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bins + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bins +
+                                                                                                                 1) if xscale == 'log' else None
+        self.y_bins = np.linspace(self.y_min, self.y_max, num_y_bins + 1) if yscale == 'linear' else np.logspace(np.log10(self.y_min), np.log10(self.y_max), num_y_bins +
+                                                                                                                 1) if yscale == 'log' else None
         self.height = np.histogram2d([], [], (self.x_bins, self.y_bins))[0]
         self.trace = 0
         self.xscale = xscale
         self.yscale = yscale
         if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set_xlim(self.x_min, self.x_max)
         self.ax.set_ylim(self.y_min, self.y_max)
@@ -414,13 +459,26 @@ class Hist2D:
 
         match axis:
             case 'x':
-                A, U, S = np.array([gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace)]).T
+                A, U, S = np.array([
+                    gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
+                    for ind, z in enumerate(self.height_per_trace)
+                ]).T
                 return U + np.expand_dims(sigma, -1) * S if self.yscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
             case 'y':
-                A, U, S = np.array([gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]]) for ind, z in enumerate(self.height_per_trace.T)]).T
+                A, U, S = np.array([
+                    gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
+                    for ind, z in enumerate(self.height_per_trace.T)
+                ]).T
                 return U + np.expand_dims(sigma, -1) * S if self.xscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
 
-    def plot_fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float = 0, default_values: list[float] = [np.nan, np.nan, np.nan], *args, **kwargs) -> tuple[np.ndarray, list[matplotlib.lines.Line2D]]:
+    def plot_fitting(self,
+                     axis: Literal['x', 'y'] = 'x',
+                     p0: list = None,
+                     bounds: list = None,
+                     sigma: float = 0,
+                     default_values: list[float] = [np.nan, np.nan, np.nan],
+                     *args,
+                     **kwargs) -> tuple[np.ndarray, list[matplotlib.lines.Line2D]]:
         """
         Args:
             axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'

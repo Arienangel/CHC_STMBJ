@@ -19,6 +19,8 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
 
     Args:
         raw_data (ndarray | str): 2D array (I, V) contains raw data, directory of files, zip file, or txt file
+        I_raw (ndarray, optional): raw current in 1D array
+        V_raw (ndarray, optional): raw voltage in 1D array
         height (float, optional): peak height of voltage
         length_segment (int, optional): length of one segment
         num_segment (int, oprional):numbber of segments
@@ -26,8 +28,6 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
         units (list, optional): default: (μA, V)
         mode (str, optional): method used to find peaks
         tolerance (int, optional): tolerance of length_segment (length_segment-tolerance~length_segment+tolerance)
-        I_raw (ndarray, optional): raw current in 1D array
-        V_raw (ndarray, optional): raw voltage in 1D array
 
     Returns:
         I (ndarray): current (A) in 2D array (#traces, length)
@@ -44,7 +44,11 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
     start_seg_index = peaks[np.isin(peaks + length_segment, (peaks + np.expand_dims(np.arange(-tolerance, tolerance + 1), -1)).ravel())]
     if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     V_seg = np.stack([V[i:i + length_segment] for i in start_seg_index])
-    rm_start_seg_index = np.concatenate([scipy.signal.argrelmax(V_seg, axis=1)[0], scipy.signal.argrelmin(V_seg, axis=1)[0], np.where(V_seg.min(axis=1) > lower)[0], np.where(V_seg.max(axis=1) < upper)[0]])  # remove non-monotonically increasing/decreasing voltage
+    rm_start_seg_index = np.concatenate(
+        [scipy.signal.argrelmax(V_seg, axis=1)[0],
+         scipy.signal.argrelmin(V_seg, axis=1)[0],
+         np.where(V_seg.min(axis=1) > lower)[0],
+         np.where(V_seg.max(axis=1) < upper)[0]])  # remove non-monotonically increasing/decreasing voltage
     start_seg_index = np.delete(start_seg_index, rm_start_seg_index)
     if start_seg_index.size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
     # segment
@@ -52,11 +56,15 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
         return np.stack([[I[p - offset[0]:p + length_segment + offset[1]], V[p - offset[0]:p + length_segment + offset[1]]] for p in start_seg_index], axis=1)
     # fullcycle
     else:
-        start_full_index = start_seg_index[np.isin(start_seg_index + length_segment * num_segment, (peaks + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel())]
-        is_start_full_index = (np.isin(np.expand_dims(start_full_index, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0), (start_seg_index + length_segment + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel()).sum(axis=1)
+        start_full_index = start_seg_index[np.isin(start_seg_index + length_segment * num_segment,
+                                                   (peaks + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel())]
+        is_start_full_index = (np.isin(
+            np.expand_dims(start_full_index, axis=1) + np.expand_dims((np.arange(num_segment) + 1) * length_segment, axis=0),
+            (start_seg_index + length_segment + np.expand_dims(np.arange(-tolerance * num_segment, tolerance * num_segment + 1), -1)).ravel()).sum(axis=1)
                                == num_segment) & (start_full_index + length_segment * num_segment + offset[1] < I.size) & (start_full_index - offset[0] >= 0)
         if start_full_index[is_start_full_index].size == 0: return np.zeros((2, 0, length_segment * num_segment + sum(offset)))
-        return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full_index[is_start_full_index]], axis=1)
+        return np.stack([[I[p - offset[0]:p + length_segment * num_segment + offset[1]], V[p - offset[0]:p + length_segment * num_segment + offset[1]]] for p in start_full_index[is_start_full_index]],
+                        axis=1)
 
 
 def noise_remove(I: np.ndarray, V: np.ndarray, V0: float = 0, dV: float = None, I_limit: float = None, **kwargs) -> tuple[np.ndarray, np.ndarray]:
@@ -128,13 +136,46 @@ def split_scan_direction(I: np.ndarray, V: np.ndarray, **kwargs) -> tuple[tuple[
 
 
 class Hist_GV(Hist2D):
+    """
+    2D conductance-voltage histogram
 
-    def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-5, 1e-1), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
-        super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
+    Args:
+        Vlim (tuple): max and min value of V
+        Glim (tuple): max and min value of G
+        num_V_bins (float): number of V bins
+        num_G_bins (float): number of G bins
+        xscale (str): linear or log scale of x axis
+        yscale (str): linear or log scale of y axis
+        Vtype (str): voltage type, Vbias or Vwk
+        kwargs (dict, optional): Hist2D kwargs
+
+    Attributes:
+        trace (int): number of traces
+        x_bins (ndarray): 1D array of x bin edges
+        y_bins (ndarray): 1D array of y bin edges
+        height (ndarray): height of the histogram
+        fig (Figure): plt.Figure object
+        ax (Axes): plt.Axes object
+        plot (QuadMesh): plt.pcolormesh object
+    """
+
+    def __init__(self,
+                 Vlim: tuple[float, float] = (-1.5, 1.5),
+                 Glim: tuple[float, float] = (1e-5, 1e-1),
+                 num_V_bins: float = 300,
+                 num_G_bins: float = 300,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 yscale: Literal['linear', 'log'] = 'log',
+                 Vtype: Literal['bias', 'wk'] = 'bias',
+                 **kwargs) -> None:
+        super().__init__(Vlim, Glim, num_V_bins, num_G_bins, xscale, yscale, **kwargs)
+        if 'bias' in Vtype: Vtype = 'bias'
+        elif 'wk' in Vtype: Vtype = 'wk'
+        else: raise ValueError('Unknown voltage type')
+        self.ax.set_xlabel('$E_{%s}\/(V)$' % Vtype)
         self.ax.set_ylabel('Conductance ($G/G_0$)')
         if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
-        self.xlabel = xlabel
+        self.Vtype = Vtype
 
     def add_data(self, I: np.ndarray = None, V: np.ndarray = None, *, G: np.ndarray = None, Vbias: float | np.ndarray = None, **kwargs) -> None:
         """
@@ -147,16 +188,49 @@ class Hist_GV(Hist2D):
             Vbias (float|np.ndarray, optional): only used if x-axis is not Ebias
         """
         if G is None:
-            if self.xlabel == 'bias': G = conductance(I, V)
+            if self.Vtype == 'bias': G = conductance(I, V)
             else: G = conductance(I, Vbias)
         super().add_data(V, np.abs(G), **kwargs)
 
 
 class Hist_IV(Hist2D):
+    """
+    2D current-voltage histogram
 
-    def __init__(self, xlim: tuple[float, float] = (-1.5, 1.5), ylim: tuple[float, float] = (1e-11, 1e-5), num_x_bin: float = 300, num_y_bin: float = 300, xscale: Literal['linear', 'log'] = 'linear', yscale: Literal['linear', 'log'] = 'log', xlabel: Literal['bias', 'wk'] = 'bias', **kwargs) -> None:
-        super().__init__(xlim, ylim, num_x_bin, num_y_bin, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('$E_{%s}\/(V)$' % xlabel)
+    Args:
+        Vlim (tuple): max and min value of V
+        Ilim (tuple): max and min value of I
+        num_V_bins (float): number of V bins
+        num_I_bins (float): number of I bins
+        xscale (str): linear or log scale of x axis
+        yscale (str): linear or log scale of y axis
+        Vtype (str): voltage type, Vbias or Vwk
+        kwargs (dict, optional): Hist2D kwargs
+
+    Attributes:
+        trace (int): number of traces
+        x_bins (ndarray): 1D array of x bin edges
+        y_bins (ndarray): 1D array of y bin edges
+        height (ndarray): height of the histogram
+        fig (Figure): plt.Figure object
+        ax (Axes): plt.Axes object
+        plot (QuadMesh): plt.pcolormesh object
+    """
+
+    def __init__(self,
+                 Vlim: tuple[float, float] = (-1.5, 1.5),
+                 Ilim: tuple[float, float] = (1e-11, 1e-5),
+                 num_V_bins: float = 300,
+                 num_I_bins: float = 300,
+                 xscale: Literal['linear', 'log'] = 'linear',
+                 yscale: Literal['linear', 'log'] = 'log',
+                 Vtype: Literal['bias', 'wk'] = 'bias',
+                 **kwargs) -> None:
+        super().__init__(Vlim, Ilim, num_V_bins, num_I_bins, xscale, yscale, **kwargs)
+        if 'bias' in Vtype: Vtype = 'bias'
+        elif 'wk' in Vtype: Vtype = 'wk'
+        else: raise ValueError('Unknown voltage type')
+        self.ax.set_xlabel('$E_{%s}\/(V)$' % Vtype)
         self.ax.set_ylabel('Current (A)')
         if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
 
@@ -195,28 +269,56 @@ class Hist_IV(Hist2D):
 
 
 class Hist_IVt(Hist2D):
+    """
+    2D current-time histogram with voltage-time plot
+
+    Args:
+        tlim (tuple): max and min value of t
+        Ilim (tuple): max and min value of I
+        Vlim (tuple): max and min value of V
+        num_t_bins (float): number of t bins
+        num_I_bins (float): number of I bins
+        xscale (str): linear or log scale of x axis (t)
+        y1scale (str): linear or log scale of y1 axis (I)
+        y2scale (str): linear or log scale of y2 axis (V)
+        x_conversion (float): sampling rate, points per second
+        Vtype (str): voltage type, Vbias or Vwk
+        kwargs (dict, optional): Hist2D kwargs
+
+    Attributes:
+        trace (int): number of traces
+        x_bins (ndarray): 1D array of x bin edges
+        y_bins (ndarray): 1D array of y bin edges
+        height (ndarray): height of the histogram
+        fig (Figure): plt.Figure object
+        ax (Axes): plt.Axes object
+        plot (QuadMesh): plt.pcolormesh object
+    """
 
     def __init__(self,
-                 xlim: tuple[float, float] = (0, 0.2),
-                 y1lim: tuple[float, float] = (1e-11, 1e-5),
-                 y2lim: tuple[float, float] = (-1.5, 1.5),
-                 num_x_bin: float = 1000,
-                 num_y1_bin: float = 300,
+                 tlim: tuple[float, float] = (0, 0.2),
+                 Glim: tuple[float, float] = (1e-11, 1e-5),
+                 Vlim: tuple[float, float] = (-1.5, 1.5),
+                 num_t_bins: float = 1000,
+                 num_I_bins: float = 300,
                  xscale: Literal['linear', 'log'] = 'linear',
                  y1scale: Literal['linear', 'log'] = 'log',
                  y2scale: Literal['linear', 'log'] = 'linear',
                  x_conversion: float = 40000,
-                 xlabel: Literal['bias', 'wk'] = 'bias',
+                 Vtype: Literal['bias', 'wk'] = 'bias',
                  **kwargs) -> None:
-        super().__init__(xlim, y1lim, num_x_bin, num_y1_bin, xscale, y1scale, **kwargs)
+        super().__init__(tlim, Glim, num_t_bins, num_I_bins, xscale, y1scale, **kwargs)
         self.colorbar.remove()
         self.ax2 = self.ax.twinx()
         self.plot2 = pd.Series()
-        self.ax2.set_ylim(*sorted(y2lim))
+        self.ax2.set_ylim(*sorted(Vlim))
         self.ax2.set_yscale(y2scale)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Current (A)')
-        self.ax2.set_ylabel('$E_{%s}\/(V)$' % xlabel)
+        if 'bias' in Vtype: Vtype = 'bias'
+        elif 'wk' in Vtype: Vtype = 'wk'
+        else: raise ValueError('Unknown voltage type')
+        self.ax2.set_ylabel('$E_{%s}\/(V)$' % Vtype)
         self.x_conversion = x_conversion
 
     def add_data(self, I: np.ndarray, V: np.ndarray, t: np.array = None, **kwargs) -> None:
@@ -239,30 +341,58 @@ class Hist_IVt(Hist2D):
 
 
 class Hist_GVt(Hist2D):
+    """
+    2D conductance-time histogram with voltage-time plot
+
+    Args:
+        tlim (tuple): max and min value of t
+        Glim (tuple): max and min value of G
+        Vlim (tuple): max and min value of V
+        num_t_bins (float): number of t bins
+        num_G_bins (float): number of G bins
+        xscale (str): linear or log scale of x axis (t)
+        y1scale (str): linear or log scale of y1 axis (G)
+        y2scale (str): linear or log scale of y2 axis (V)
+        x_conversion (float): sampling rate, points per second
+        Vtype (str): voltage type, Vbias or Vwk
+        kwargs (dict, optional): Hist2D kwargs
+
+    Attributes:
+        trace (int): number of traces
+        x_bins (ndarray): 1D array of x bin edges
+        y_bins (ndarray): 1D array of y bin edges
+        height (ndarray): height of the histogram
+        fig (Figure): plt.Figure object
+        ax (Axes): plt.Axes object
+        plot (QuadMesh): plt.pcolormesh object
+    """
 
     def __init__(self,
-                 xlim: tuple[float, float] = (0, 0.2),
-                 y1lim: tuple[float, float] = (1e-5, 1e-1),
-                 y2lim: tuple[float, float] = (-1.5, 1.5),
-                 num_x_bin: float = 1000,
-                 num_y1_bin: float = 300,
+                 tlim: tuple[float, float] = (0, 0.2),
+                 Glim: tuple[float, float] = (1e-5, 1e-1),
+                 Vlim: tuple[float, float] = (-1.5, 1.5),
+                 num_t_bins: float = 1000,
+                 num_G_bins: float = 300,
                  xscale: Literal['linear', 'log'] = 'linear',
                  y1scale: Literal['linear', 'log'] = 'log',
                  y2scale: Literal['linear', 'log'] = 'linear',
                  x_conversion: float = 40000,
-                 xlabel: Literal['bias', 'wk'] = 'bias',
+                 Vtype: Literal['bias', 'wk'] = 'bias',
                  **kwargs) -> None:
-        super().__init__(xlim, y1lim, num_x_bin, num_y1_bin, xscale, y1scale, **kwargs)
+        super().__init__(tlim, Glim, num_t_bins, num_G_bins, xscale, y1scale, **kwargs)
         self.colorbar.remove()
         self.ax2 = self.ax.twinx()
         self.plot2 = pd.Series()
-        self.ax2.set_ylim(*sorted(y2lim))
+        self.ax2.set_ylim(*sorted(Vlim))
         self.ax2.set_yscale(y2scale)
         self.ax.set_xlabel('Time (s)')
         self.ax.set_ylabel('Conductance ($G/G_0$)')
-        self.ax2.set_ylabel('$E_{%s}\/(V)$' % xlabel)
+        if 'bias' in Vtype: Vtype = 'bias'
+        elif 'wk' in Vtype: Vtype = 'wk'
+        else: raise ValueError('Unknown voltage type')
+        self.ax2.set_ylabel('$E_{%s}\/(V)$' % Vtype)
         self.x_conversion = x_conversion
-        self.xlabel = xlabel
+        self.Vtype = Vtype
 
     def add_data(self, I: np.ndarray = None, V: np.ndarray = None, t: np.array = None, *, G: np.ndarray = None, Vbias: float | np.ndarray = None, **kwargs) -> None:
         """
@@ -276,7 +406,7 @@ class Hist_GVt(Hist2D):
             Vbias (float|np.ndarray, optional): only used if x-axis is not Ebias
         """
         if G is None:
-            if self.xlabel == 'bias': G = conductance(I, V)
+            if self.Vtype == 'bias': G = conductance(I, V)
             else: G = conductance(I, Vbias)
         if t is None: t = np.mgrid[0:G.shape[0]:1, 0:G.shape[1]:1][1] / self.x_conversion
         elif t.ndim == 1: t = np.tile(t, (G.shape[0], 1))

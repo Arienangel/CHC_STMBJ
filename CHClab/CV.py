@@ -3,6 +3,13 @@ import re, io
 
 
 class Segment:
+    """
+    IV segment
+
+    Args:
+        V (ndarray): voltage
+        I (ndarray): current
+    """
 
     def __init__(self, V: np.ndarray, I: np.ndarray):
         self.V = V
@@ -10,6 +17,15 @@ class Segment:
 
     @staticmethod
     def concat(segment: list):
+        """
+        Concat multiple segments into one segment
+
+        Args:
+            segment (list): list of segments
+
+        Returns:
+            Segment: concat of segments
+        """
         V = np.concatenate([s.V for s in segment])
         I = np.concatenate([s.I for s in segment])
         return Segment(V, I)
@@ -35,6 +51,23 @@ class CVdata:
                  interval: float = None,
                  quiet_time: float = None,
                  sensitivity: float = None):
+        """
+        Cyclic voltammetry data
+
+        Args:
+            V (np.ndarray): voltage
+            I (np.ndarray): current
+            Vinit (float, optional): start voltage
+            Vmax (float, optional): max voltage
+            Vmin (float, optional): min voltage
+            Vfinal (float, optional): end voltage
+            polarity (bool, optional): voltage scan from negative to positive if true
+            scan_rate (float, optional): voltage scan rate (V/s)
+            num_segment (int, optional): number of segments
+            interval (float, optional): voltage change per point
+            quiet_time (float, optional): quiet time
+            sensitivity (float, optional): sensitivity
+        """
         self.V = V
         self.I = I
         self.fullcycle = Segment(V, I)
@@ -55,6 +88,16 @@ class CVdata:
 
     @staticmethod
     def extract_data_from_chi(file: str = None, string: str = None):
+        """
+        Extract CV data from chi760 output file
+
+        Args:
+            file (str): chi760 txt path
+            string (str): chi760 txt content
+
+        Returns:
+            CVdata
+        """
         if file is not None:
             with open(file, mode='r', encoding='utf-8') as f:
                 data = f.read()
@@ -66,7 +109,7 @@ class CVdata:
             V, I1, I2 = np.genfromtxt(io.StringIO(re.search(r"Potential/V, i1/A, i2/A\n\n((.|\n)*)\n", data).group(1)), delimiter=', ', unpack=True)
             I = np.stack([I1, I2]).T
         else:
-            raise ValueError('Unknown format')
+            raise NotImplementedError('Unknown format')
         Vinit = float(re.search(r"Init E \(V\) = (.*)\n", data).group(1))
         Vmax = float(re.search(r"High E \(V\) = (.*)\n", data).group(1))
         Vmin = float(re.search(r"Low E \(V\) = (.*)\n", data).group(1))
@@ -86,20 +129,42 @@ class CVdata:
         if isinstance(segment_index, Iterable): return [self.segment[i] for i in segment_index]
         else: return self.segment[segment_index]
 
-    def plot(self, segment_index: Union[int, list[int]] = None, split_segment: bool = False, set_legend: bool = False, plot=None, *args, **kwargs):
+    def plot(self, segment_index: Union[int, list[int]] = None, split_segment: bool = False, set_legend: bool = False, *, plot=None, **kwargs):
+        """
+        Plot cyclic voltammogram
+
+        Args:
+            segment_index (int | list[int], optional): plot specific segments. plot all if none
+            split_segment (bool, optional): split segments into multiple lines
+            set_legend (bool, optional): show segment index
+            plot (PlotCV, optional)
+
+        Returns:
+            _type_: _description_
+        """
         plot = plot or PlotCV(xlim=(self.Vmin - 0.1, self.Vmax + 0.1))
         if segment_index is None: plot.add_segment(self.fullcycle, *args, **kwargs)
         else:
             if split_segment:
                 for i in segment_index:
-                    plot.add_segment(self[i], label=i + 1, *args, **kwargs)
+                    plot.add_segment(self[i], label=i + 1, **kwargs)
                 if set_legend: plot.ax.legend()
             else:
-                plot.add_segment(Segment.concat(self[segment_index]), *args, **kwargs)
+                plot.add_segment(Segment.concat(self[segment_index]), **kwargs)
         return plot
 
 
 class OCPdata:
+    """
+    Open circuit potential data
+
+    Args:
+        t (np.ndarray): time
+        V (np.ndarray): voltage
+
+    Attributes:
+        mean (float): mean voltage
+    """
 
     def __init__(self, t: np.ndarray, V: np.ndarray):
         self.t = t
@@ -107,6 +172,16 @@ class OCPdata:
 
     @staticmethod
     def extract_data_from_chi(file: str = None, string: str = None):
+        """
+        Extract OCP data from chi760 output file
+
+        Args:
+            file (str): chi760 txt path
+            string (str): chi760 txt content
+
+        Returns:
+            OCPdata
+        """
         if string is None:
             with open(file, mode='r', encoding='utf-8') as f:
                 data = f.read()
@@ -121,20 +196,39 @@ class OCPdata:
 
 
 class PlotCV:
+    """
+        Plot cyclic voltammogram
 
-    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, figsize: tuple = None, prop_cycle: list = None, **kwargs):
+        Args:
+            subplots_kw (dict, optional): plt.subplots kwargs
+            prop_cycle (list, optional): plt prop cycle
+    """
 
+    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, subplots_kw: tuple = None, prop_cycle: list = None, **kwargs):
         if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         if prop_cycle is not None: self.ax.set_prop_cycle(color=prop_cycle)
         self.ax.set_xlabel('Voltage (V)')
         self.ax.set_ylabel('Current (A)')
         if kwargs: self.ax.set(**kwargs)
 
-    def add_data(self, x: np.ndarray, y: np.ndarray, *args, **kwargs):
-        self.ax.plot(x, y, *args, **kwargs)
+    def add_data(self, V: np.ndarray, I: np.ndarray, *args, **kwargs):
+        """
+        Add data into cyclic voltammogram
+
+        Args:
+            V (ndarray): voltage
+            I (ndarray): current
+        """
+        self.ax.plot(V, I, *args, **kwargs)
 
     def add_segment(self, segment: Union[CVdata, Segment, Iterable], *args, **kwargs):
+        """
+        Add segment into cyclic voltammogram
+
+        Args:
+            segment (CVdata | Segment | Iterable): 
+        """
         if not isinstance(segment, Iterable): segment = [segment]
         for s in segment:
             self.add_data(s.V, s.I, *args, **kwargs)

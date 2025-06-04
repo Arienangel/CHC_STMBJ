@@ -1,3 +1,6 @@
+import scipy.fft
+import scipy.integrate
+
 from .common import *
 
 
@@ -22,7 +25,7 @@ def noise_power(PSD: np.ndarray, freq: np.ndarray, integrand: list = [100, 1000]
     Args:
         PSD (np.ndarray): power spectral density
         freq (np.ndarray): sample frequency of PSD
-        interval (list, optional): integrand. Defaults to 100~1000 Hz.
+        interval (list, optional): integrand of df. Defaults to 100~1000 Hz.
 
     Returns:
         NP (np.ndarray): noise power
@@ -32,8 +35,21 @@ def noise_power(PSD: np.ndarray, freq: np.ndarray, integrand: list = [100, 1000]
     return 2 * scipy.integrate.trapezoid(PSD[:, idx], freq[idx], axis=1)  # include negative frequency
 
 
+class Flicker_noise:
+    """
+    Flicker noise object
 
-class Flicker_Noise:
+    Args:
+        sampling_rate (tuple): points per second
+        xscale (str): linear or log scale of x axis
+        yscale (str): linear or log scale of y axis
+        kwargs (dict, optional): Hist2D kwargs
+
+    Attributes:
+        trace (int): number of traces
+        fig (Figure): plt.Figure object
+        ax (Axes): plt.Axes object
+    """
 
     def __init__(self,
                  sampling_rate: float = 40000,
@@ -59,10 +75,22 @@ class Flicker_Noise:
         else: return 0
 
     def set_data(self, G: np.ndarray, integrand=[100, 1000], n: float = 0, auto_fit=False):
-        PSD, freq = PSD(G, self.sampling_rate)
-        NP = noise_power(PSD, freq, integrand)
-        Gmean = np.mean(G, axis=1)
-        return self.plot(Gmean, NP, n, auto_fit)
+        """
+        Set data into NP-G plot
+
+        Args:
+            G (ndarray): 2D G array with shape (trace, length)
+            integrand (list): integrand of df. Defaults to 100~1000 Hz.
+            n (float, optional): noise power scaling exponent
+
+        Returns:
+            n (float): noise power scaling exponent
+        """
+
+        psd, freq = PSD(G, self.sampling_rate)
+        np = noise_power(psd, freq, integrand)
+        Gmean = G.mean(axis=1)
+        return self.plot(Gmean, np, n, auto_fit)
 
     def plot(self, Gmean: np.ndarray, NP: np.ndarray, n: float = 0, auto_fit=False) -> float:
         """
