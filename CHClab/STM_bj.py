@@ -13,7 +13,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list],
     Extract useful data from raw_data
 
     Args:
-        raw_data (ndarray | str): 1D array contains raw data, directory of files, zip file, or txt file
+        raw_data (ndarray | str): 1D array (G) contains raw data, directory of files, zip file, or txt file
         length (int): length of extracted data per trace
         upper (float): extract data greater than upper limit
         lower (float): extract data less than lower limit
@@ -22,7 +22,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list],
         cut_point (float, optional): used to find traces at G=cut_point. Default to (upper * lower)**0.5
 
     Returns:
-        extracted_data (ndarray): 2D array with shape (trace, length)
+        extracted_data (ndarray): 2D G array with shape (trace, length)
     '''
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:

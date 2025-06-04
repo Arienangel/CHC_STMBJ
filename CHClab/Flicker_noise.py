@@ -3,6 +3,39 @@ import scipy.integrate
 
 from .common import *
 
+def extract_data(raw_data: Union[np.ndarray, str, list]=None,
+                 length: int = 6000,
+                 start_from: int=4000,
+                 zero_point: float = 0.5,
+                 units: list = [1e-6, 1],
+                 *,
+                 I_raw: np.array = None,
+                 V_raw: np.array = None,
+                 **kwargs) -> np.ndarray:
+    '''
+    Extract traces from raw_data
+
+    Args:
+        raw_data (ndarray | str): 1D G array or 2D array (I, V) contains raw data, directory of files, zip file, or txt file
+        I_raw (ndarray, optional): raw current in 1D array
+        V_raw (ndarray, optional): raw voltage in 1D array
+        length (int): length of extracted data per trace
+        start_from (int): length between zero_point and start of trace
+        zero_point (float): set x=0 at G=zero_point
+
+    Returns:
+        I (ndarray): current (A) in 2D array (#traces, length)
+        V (ndarray): voltage (V) in 2D array (#traces, length)
+    '''
+    if raw_data is None: raw_data = conductance(I_raw*units[0], V_raw*units[1])
+    elif not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
+    if raw_data.shape[0]==2: raw_data=conductance(*(raw_data[::-1] * np.expand_dims(units, 1)))
+    if raw_data.size:
+        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > zero_point, 1, 0))), distance=start_from+length)
+        index=index[raw_data[index]>raw_data[index+start_from+length]]
+        return np.stack([raw_data[i+start_from:i+start_from+length] for i in filter(lambda i: i+start_from+length<raw_data.size, index)])
+    return np.empty((0, length))
+
 
 def PSD(G: np.ndarray, sampling_rate: float = 40000) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -106,8 +139,8 @@ class Flicker_noise:
         if self.ax.lines: self.ax.lines[0].remove()
         if auto_fit:
             n, c = scipy.optimize.curve_fit(lambda x, n, c: n * x + c,
-                                            Gmean if self.xscale == 'linear' else np.log10(Gmean),
-                                            NP if self.yscale == 'linear' else np.log10(NP),
+                                            Gmean if self.xscale == 'linear' else np.log10(np.abs(Gmean)),
+                                            NP if self.yscale == 'linear' else np.log10(np.abs(NP)),
                                             bounds=[[0, -np.inf], [3, np.inf]])[0]
         y = NP / Gmean**n if n else NP
         self.ax.plot(Gmean, y, '.')
