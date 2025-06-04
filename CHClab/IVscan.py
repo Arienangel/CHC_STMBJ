@@ -297,7 +297,7 @@ class Hist_IVt(Hist2D):
 
     def __init__(self,
                  tlim: tuple[float, float] = (0, 0.2),
-                 Glim: tuple[float, float] = (1e-11, 1e-5),
+                 Ilim: tuple[float, float] = (1e-11, 1e-5),
                  Vlim: tuple[float, float] = (-1.5, 1.5),
                  num_t_bins: float = 1000,
                  num_I_bins: float = 300,
@@ -307,7 +307,7 @@ class Hist_IVt(Hist2D):
                  x_conversion: float = 40000,
                  Vtype: Literal['bias', 'wk'] = 'bias',
                  **kwargs) -> None:
-        super().__init__(tlim, Glim, num_t_bins, num_I_bins, xscale, y1scale, **kwargs)
+        super().__init__(tlim, Ilim, num_t_bins, num_I_bins, xscale, y1scale, **kwargs)
         self.colorbar.remove()
         self.ax2 = self.ax.twinx()
         self.plot2 = pd.Series()

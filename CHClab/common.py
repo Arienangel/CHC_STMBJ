@@ -457,6 +457,7 @@ class Hist2D:
                 logging.warning(f'Least-square minimization failed at {axis}={label}')
                 return default_values
 
+        if len(default_values)!=3: raise ValueError('Default value should be [A, U, S]')
         match axis:
             case 'x':
                 A, U, S = np.array([
