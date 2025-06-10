@@ -1516,7 +1516,7 @@ class CV_GUI:
         self.canvas_CV.draw_idle()
         self.window.update_idletasks()
         self.V, self.I = np.loadtxt(path, unpack=True) * [[self.V_unit.get()], [self.I_unit.get()]]
-        self.plot_CV.add_segment(CV.CVdata(self.V, self.I))
+        self.plot_CV.add_data(self.V, self.I)
         self.queue.put(Queue_Item(self.canvas_CV.draw_idle))
 
     def updatetk(self):

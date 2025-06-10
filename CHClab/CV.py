@@ -15,24 +15,69 @@ class Segment:
         self.V = V
         self.I = I
 
-    @staticmethod
-    def concat(segment: list):
+    def __getitem__(self, index: slice):
+        return Segment(self.V[index], self.I[index])
+
+    def __len__(self):
+        return self.V.size
+
+    def extend(self, segments):
+        self.I = np.concatenate([self.I, *[s.I for s in segments]])
+        self.V = np.concatenate([self.V, *[s.V for s in segments]])
+
+    def plot(self, *args, plot=None, **kwargs):
         """
-        Concat multiple segments into one segment
+        Plot segment
 
         Args:
-            segment (list): list of segments
+            plot (PlotCV, optional)
 
         Returns:
-            Segment: concat of segments
+            PlotCV
         """
-        V = np.concatenate([s.V for s in segment])
-        I = np.concatenate([s.I for s in segment])
-        return Segment(V, I)
+        plot = plot or PlotCV()
+        plot.add_segments(self, *args, **kwargs)
+        return plot
 
-    def plot(self, *args, **kwargs):
-        plot = PlotCV(xlim=(self.V.min() - 0.1, self.V.max() + 0.1))
-        plot.add_segment(self, *args, **kwargs)
+
+class Segments(list[Segment]):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __getitem__(self, index: int | slice | Iterable):
+        if isinstance(index, Iterable):
+            return Segments([self[i] for i in index])
+        else:
+            L = super().__getitem__(index)
+            return L if isinstance(L, Segment) else Segments(L)
+
+    def concat(self):
+        """
+        Concat all segments into one segment
+
+        Returns:
+            Segment
+        """
+        return Segment(np.concatenate([s.V for s in self]), np.concatenate([s.I for s in self]))
+
+    def plot(self, split_segment: bool = False, *args, label: list = None, plot=None, **kwargs):
+        """
+        Plot segments
+
+        Args:
+            split_segment (bool, optional): split segments into multiple lines
+            label (list, optional): label of each segment 
+            plot (PlotCV, optional)
+
+        Returns:
+            PlotCV
+        """
+        plot = plot or PlotCV()
+        if split_segment:
+            plot.add_segments(self, label=label, *args, **kwargs)
+        else:
+            plot.add_segments(self.concat(), *args, **kwargs)
         return plot
 
 
@@ -74,7 +119,7 @@ class CVdata:
         segment_split_index = np.sort(np.concatenate([scipy.signal.find_peaks(self.V)[0], scipy.signal.find_peaks(-self.V)[0]]))
         Vsegment = np.array_split(V, segment_split_index)
         Isegment = np.array_split(I, segment_split_index)
-        self.segment = [Segment(V=Vsegment[i], I=Isegment[i]) for i in range(len(Vsegment))]
+        self.segments = Segments([Segment(V=Vsegment[i], I=Isegment[i]) for i in range(len(Vsegment))])
         self.Vinit = Vinit or V[0]
         self.Vmax = Vmax or V.max()
         self.Vmin = Vmin or V.min()
@@ -125,32 +170,36 @@ class CVdata:
         sensitivity = float(re.search(r"Sensitivity \(A/V\) = (.*)\n", data).group(1))
         return CVdata(V, I, Vinit, Vmax, Vmin, Vfinal, polarity, scan_rate, num_segment, interval, quiet_time, sensitivity)
 
-    def __getitem__(self, segment_index: Union[int, slice, Iterable]):
-        if isinstance(segment_index, Iterable): return [self.segment[i] for i in segment_index]
-        else: return self.segment[segment_index]
+    def __getitem__(self, index: slice):
+        return self.segments[index]
 
-    def plot(self, segment_index: Union[int, list[int]] = None, split_segment: bool = False, set_legend: bool = False, *, plot=None, **kwargs):
+    def __iter__(self):
+        for s in self.segments:
+            yield s
+
+    def __len__(self):
+        return self.segments.__len__()
+
+    def concat(self):
+        return self.segments.concat()
+
+    def plot(self, segment_index: int | slice | Iterable = None, split_segment: bool = False, *args, label: list = None, plot=None, **kwargs):
         """
         Plot cyclic voltammogram
 
         Args:
-            segment_index (int | list[int], optional): plot specific segments. plot all if none
+            segment_index (inint | slice | Iterable, optional): plot specific segments. plot all if none
             split_segment (bool, optional): split segments into multiple lines
-            set_legend (bool, optional): show segment index
+            label (list, optional): label of each segment 
             plot (PlotCV, optional)
 
         Returns:
-            _type_: _description_
+            PlotCV
         """
-        plot = plot or PlotCV(xlim=(self.Vmin - 0.1, self.Vmax + 0.1))
-        if segment_index is None: plot.add_segment(self.fullcycle, *args, **kwargs)
-        else:
-            if split_segment:
-                for i in segment_index:
-                    plot.add_segment(self[i], label=i + 1, **kwargs)
-                if set_legend: plot.ax.legend()
-            else:
-                plot.add_segment(Segment.concat(self[segment_index]), **kwargs)
+        plot = plot or PlotCV()
+        if segment_index is None: plot.add_segments(self.fullcycle, *args, **kwargs)
+        elif isinstance(segment_index, int): self.segments[segment_index].plot(plot=plot, *args, **kwargs)
+        else: self.segments[segment_index].plot(split_segment=split_segment, label=label, plot=plot, *args, **kwargs)
         return plot
 
 
@@ -204,13 +253,13 @@ class PlotCV:
             prop_cycle (list, optional): plt prop cycle
     """
 
-    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, subplots_kw: tuple = None, prop_cycle: list = None, **kwargs):
+    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, subplots_kw: tuple = None, prop_cycle: list = None, **ax_set):
         if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         if prop_cycle is not None: self.ax.set_prop_cycle(color=prop_cycle)
         self.ax.set_xlabel('Voltage (V)')
         self.ax.set_ylabel('Current (A)')
-        if kwargs: self.ax.set(**kwargs)
+        if ax_set: self.ax.set(**ax_set)
 
     def add_data(self, V: np.ndarray, I: np.ndarray, *args, **kwargs):
         """
@@ -222,13 +271,19 @@ class PlotCV:
         """
         self.ax.plot(V, I, *args, **kwargs)
 
-    def add_segment(self, segment: Union[CVdata, Segment, Iterable], *args, **kwargs):
+    def add_segments(self, segments: CVdata | Segments | Segment, *args, label: list = None, **kwargs):
         """
-        Add segment into cyclic voltammogram
+        Add segments into cyclic voltammogram
 
         Args:
-            segment (CVdata | Segment | Iterable): 
+            segments (CVdata | Segments | Segment):
+            label (list, optional): label of each segment 
         """
-        if not isinstance(segment, Iterable): segment = [segment]
-        for s in segment:
-            self.add_data(s.V, s.I, *args, **kwargs)
+        if isinstance(segments, Segment):
+            self.add_data(segments.V, segments.I, label=label, *args, **kwargs)
+        else:
+            for i, s in enumerate(segments):
+                self.add_data(s.V, s.I, label=label[i], *args, **kwargs) if label else self.add_data(s.V, s.I, *args, **kwargs)
+
+    def legend(self):
+        self.ax.legend()
