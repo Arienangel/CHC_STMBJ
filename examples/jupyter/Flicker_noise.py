@@ -17,11 +17,11 @@ PSD, freq = Flicker_noise.PSD(G[f], sampling_rate=sampling_rate)
 NP = Flicker_noise.noise_power(PSD, freq, integrand=[100, 1000])
 Gmean = G[f].mean(axis=1)
 # %% NP-G plot with specific n
-F0 = Flicker_noise.Flicker_noise(sampling_rate=sampling_rate, xscale='log', yscale='log')
+F0 = Flicker_noise.Flicker_noise_data(sampling_rate=sampling_rate, xscale='log', yscale='log')
 n = F0.set_data(G[f], integrand=[100, 1000], n=0)
 n
 # %% NP-G plotwith auto fit n
-FN = Flicker_noise.Flicker_noise(sampling_rate=sampling_rate, xscale='log', yscale='log')
+FN = Flicker_noise.Flicker_noise_data(sampling_rate=sampling_rate, xscale='log', yscale='log')
 n = FN.set_data(G[f], integrand=[100, 1000], auto_fit=True)
 n
 # %%
