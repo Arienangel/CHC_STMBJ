@@ -19,18 +19,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 
-from CHClab import CV, IVscan, STM_bj
-
-
-class Queue_Item:
-
-    def __init__(self, func, *args, **kwargs) -> None:
-        self.func = func
-        self.args = args
-        self.kwargs = kwargs
-
-    def run(self):
-        self.func(*self.args, **self.kwargs)
+from CHClab import CV, IVscan, STM_bj, Flicker_noise
 
 
 class Main:
@@ -44,7 +33,7 @@ class Main:
         frame.grid(row=0, column=0, sticky='nw')
         tk.Label(frame, text='Experiment: ').pack(side='left')
         self.option = tk.StringVar(self.window, value='Select')
-        tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan', 'CV'], command=self.new_tab).pack(side='left')
+        tk.OptionMenu(frame, self.option, *['STM bj', 'IV scan', 'CV', 'Flicker noise'], command=self.new_tab).pack(side='left')
         self.CPU_threads = tk.IntVar(self.window, value=multiprocessing.cpu_count())
         self.always_on_top = tk.BooleanVar(self.window, value=False)
         tk.Label(frame, text='CPU threads: ').pack(side='left')
@@ -80,6 +69,11 @@ class Main:
                 self.tabcontrol.add(tab, text=name)
                 self.tabcontrol.select(tab)
                 tab.gui_object = CV_GUI(tab)
+            case 'Flicker noise':
+                tab = ttk.Frame(self.tabcontrol)
+                self.tabcontrol.add(tab, text=name)
+                self.tabcontrol.select(tab)
+                tab.gui_object = Flicker_noise_GUI(tab)
 
     def tab_rename_start(self, *args):
         try:
@@ -134,7 +128,8 @@ class STM_bj_GUI:
         self.directory_path = tk.StringVar(self.window)
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=80).grid(row=0, column=1, columnspan=5)
-        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2',
+                  command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.extract_length = tk.IntVar(self.window, value=2000)
@@ -204,7 +199,10 @@ class STM_bj_GUI:
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none', undo=True, maxundo=-1)
         self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
-        self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
+        self.colorbar_conf.insert(
+            '0.0',
+            '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}'
+        )
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=6, column=6, padx=10)
         self.is_run = False
@@ -223,8 +221,8 @@ class STM_bj_GUI:
         self.plot_2DCH = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Histogram G', variable=self.plot_hist_G).pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram GS', variable=self.plot_hist_GS).pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram Gt', variable=self.plot_hist_Gt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram G-S', variable=self.plot_hist_GS).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram G-t', variable=self.plot_hist_Gt).pack(side='left')
         tk.Checkbutton(self.frame_is_plot, text='Cross-correlation', variable=self.plot_2DCH).pack(side='left')
         # figure frame
         self.frame_figure = tk.Frame(self.window)
@@ -240,10 +238,9 @@ class STM_bj_GUI:
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting')
         self.status_last_file.pack(side='left')
-        self.queue = Queue()
-        self.updatetk()
+        self.queue = queue
         if ini_config:
-            if 'IVscan' in ini_config:
+            if 'STM-bj' in ini_config:
                 self.import_setting(ini_config['STM-bj'])
 
     def colorbar_apply(self, *args):
@@ -307,7 +304,8 @@ class STM_bj_GUI:
                     self.canvas_G.draw_idle()
                 # hist GS
                 if self.run_config['plot_hist_GS']:
-                    self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(), self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
+                    self.hist_GS = STM_bj.Hist_GS([self.X_min.get(), self.X_max.get()], [self.G_min.get(), self.G_max.get()], self.X_bins.get(), self.G_bins.get(), self.X_scale.get(),
+                                                  self.G_scale.get(), self.zero_point.get(), self.points_per_nm.get())
                     self.canvas_GS = FigureCanvasTkAgg(self.hist_GS.fig, self.frame_figure)
                     self.canvas_GS.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_GS = NavigationToolbar2Tk(self.canvas_GS, self.frame_figure, pack_toolbar=False)
@@ -315,7 +313,8 @@ class STM_bj_GUI:
                     self.canvas_GS.draw_idle()
                 # hist Gt
                 if (self.is_raw.get() == 'raw') & self.run_config['plot_hist_Gt']:
-                    self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get())
+                    self.hist_Gt = STM_bj.Hist_Gt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], self.t_bin_size.get(), self.G_bins.get(), self.t_scale.get(),
+                                                  self.G_scale.get())
                     self.canvas_Gt = FigureCanvasTkAgg(self.hist_Gt.fig, self.frame_figure)
                     self.canvas_Gt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
                     self.navtool_Gt = NavigationToolbar2Tk(self.canvas_Gt, self.frame_figure, pack_toolbar=False)
@@ -515,15 +514,6 @@ class STM_bj_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
-    def updatetk(self):
-        while not self.queue.empty():
-            try:
-                item: Queue_Item = self.queue.get()
-                item.run()
-            except Exception as E:
-                logger.warning(f'{type(E).__name__}: {E.args}')
-        self.window.after(100, self.updatetk)
-
     def cleanup(self, catagory: Literal['partial', 'all']):
         if hasattr(self, 'time_init'): del self.time_init
         if hasattr(self, 'G'): del self.G
@@ -580,19 +570,19 @@ class STM_bj_export_prompt:
         self.check_raw_X = tk.BooleanVar(self.window, value=True)  #disabled
         self.check_raw_G = tk.BooleanVar(self.window, value=True)
         self.check_raw_logG = tk.BooleanVar(self.window, value=True)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_X, text='X', state='disabled').grid(row=0, column=0, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=1, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=2, sticky='w')
         # 1D
         self.check_1D_G = tk.BooleanVar(self.window, value=True)  #disabled
         self.option_1D_count = tk.StringVar(self.window, value='Count')
-        tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0)
-        tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        tk.Checkbutton(tab_1D, variable=self.check_1D_G, text='G', state='disabled').grid(row=0, column=0, sticky='w')
+        tk.OptionMenu(tab_1D, self.option_1D_count, *['Count', 'Count/trace']).grid(row=0, column=1, sticky='w')
         # 2D
         self.check_2D_axis = tk.BooleanVar(self.window, value=False)
         self.option_2D_count = tk.StringVar(self.window, value='Count')
-        tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0)
-        tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        tk.Checkbutton(tab_2D, variable=self.check_2D_axis, text='Axis').grid(row=0, column=0, sticky='w')
+        tk.OptionMenu(tab_2D, self.option_2D_count, *['Count', 'Count/trace']).grid(row=0, column=1, sticky='w')
         # button
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
@@ -608,20 +598,29 @@ class STM_bj_export_prompt:
         tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
             case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = self.root.X.ravel()
                 if self.check_raw_G.get(): A = np.vstack([A, self.root.G.ravel()])
                 if self.check_raw_logG.get(): A = np.vstack([A, np.log10(np.abs(self.root.G)).ravel()])
                 np.savetxt(path, A.T, delimiter=",")
             case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 G = np.log10(np.abs(self.root.hist_G.x)) if self.root.run_config['G_scale'] == 'log' else self.root.hist_G.x
                 count = self.root.hist_G.height_per_trace if self.option_1D_count.get() == 'Count/trace' else self.root.hist_G.height
                 np.savetxt(path, np.vstack([G, count]).T, delimiter=',')
             case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_GS.height_per_trace.T if self.option_2D_count.get() == 'Count/trace' else self.root.hist_GS.height.T
                 if self.check_2D_axis.get():
@@ -687,7 +686,8 @@ class IVscan_GUI:
         self.directory_path = tk.StringVar()
         tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
         tk.Entry(self.frame_config, textvariable=self.directory_path, width=85).grid(row=0, column=1, columnspan=5)
-        tk.Button(self.frame_config, text="Files", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2',
+                  command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
         tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
         # row 1
         self.mode = tk.StringVar(self.window, value='Ebias')
@@ -820,7 +820,10 @@ class IVscan_GUI:
         self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none', undo=True, maxundo=-1)
         self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
         self.colorbar_conf.grid(row=9, column=1, columnspan=5, sticky='w')
-        self.colorbar_conf.insert('0.0', '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}')
+        self.colorbar_conf.insert(
+            '0.0',
+            '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}'
+        )
         self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
         self.run_button.grid(row=9, column=6, padx=10)
         self.is_run = False
@@ -838,10 +841,10 @@ class IVscan_GUI:
         self.plot_hist_IVt = tk.BooleanVar(self.window, value=False)
         self.plot_hist_GVt = tk.BooleanVar(self.window, value=False)
         tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram IV', variable=self.plot_hist_IV).pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram GV', variable=self.plot_hist_GV).pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram IVt', variable=self.plot_hist_IVt).pack(side='left')
-        tk.Checkbutton(self.frame_is_plot, text='Histogram GVt', variable=self.plot_hist_GVt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram I-V', variable=self.plot_hist_IV).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram G-V', variable=self.plot_hist_GV).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram IV-t', variable=self.plot_hist_IVt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram GV-t', variable=self.plot_hist_GVt).pack(side='left')
         # figure frame
         self.frame_figure = tk.Frame(self.window)
         self.frame_figure.pack(side='top', anchor='w')
@@ -859,8 +862,7 @@ class IVscan_GUI:
         tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
         self.status_last_file = tk.Label(self.frame_status, text='Waiting', anchor='w')
         self.status_last_file.pack(side='left', anchor='w')
-        self.queue = Queue()
-        self.updatetk()
+        self.queue = queue
         if ini_config:
             if 'IVscan' in ini_config:
                 self.import_setting(ini_config['IVscan'])
@@ -939,7 +941,8 @@ class IVscan_GUI:
                 self.G_full = np.empty((0, full_length))
                 # hist IV
                 if self.run_config['plot_hist_IV']:
-                    self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(), self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.hist_IV = IVscan.Hist_IV([self.V_min.get(), self.V_max.get()], [self.I_min.get(), self.I_max.get()], self.V_bins.get(), self.I_bins.get(), self.V_scale.get(),
+                                                  self.I_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IV = FigureCanvasTkAgg(self.hist_IV.fig, self.frame_figure)
                     self.canvas_IV.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_IV = NavigationToolbar2Tk(self.canvas_IV, self.frame_figure, pack_toolbar=False)
@@ -947,7 +950,8 @@ class IVscan_GUI:
                     self.canvas_IV.draw_idle()
                 #hist GV
                 if self.run_config['plot_hist_GV']:
-                    self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(), self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
+                    self.hist_GV = IVscan.Hist_GV([self.V_min.get(), self.V_max.get()], [self.G_min.get(), self.G_max.get()], self.V_bins.get(), self.G_bins.get(), self.V_scale.get(),
+                                                  self.G_scale.get(), 'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_GV = FigureCanvasTkAgg(self.hist_GV.fig, self.frame_figure)
                     self.canvas_GV.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_GV = NavigationToolbar2Tk(self.canvas_GV, self.frame_figure, pack_toolbar=False)
@@ -955,7 +959,8 @@ class IVscan_GUI:
                     self.canvas_GV.draw_idle()
                 # hist IVt
                 if self.run_config['plot_hist_IVt']:
-                    self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                    self.hist_IVt = IVscan.Hist_IVt([self.t_min.get(), self.t_max.get()], [self.I_min.get(), self.I_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(),
+                                                    self.I_bins.get(), self.t_scale.get(), self.I_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
                                                     'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_IVt = FigureCanvasTkAgg(self.hist_IVt.fig, self.frame_figure)
                     self.canvas_IVt.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
@@ -964,7 +969,8 @@ class IVscan_GUI:
                     self.canvas_IVt.draw_idle()
                 # hist GVt
                 if self.run_config['plot_hist_GVt']:
-                    self.hist_GVt = IVscan.Hist_GVt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(), self.G_bins.get(), self.t_scale.get(), self.G_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
+                    self.hist_GVt = IVscan.Hist_GVt([self.t_min.get(), self.t_max.get()], [self.G_min.get(), self.G_max.get()], [self.V_min.get(), self.V_max.get()], self.t_bins.get(),
+                                                    self.G_bins.get(), self.t_scale.get(), self.G_scale.get(), self.V_scale.get(), self.sampling_rate.get(),
                                                     'wk' if self.mode.get() == 'Ewk' else 'bias')
                     self.canvas_GVt = FigureCanvasTkAgg(self.hist_GVt.fig, self.frame_figure)
                     self.canvas_GVt.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
@@ -1008,7 +1014,7 @@ class IVscan_GUI:
                     self.current_lines_IV = None
                     self.current_lines_GV = None
                     frame_trace_IV = tk.Frame(self.frame_figure)
-                    frame_trace_IV.grid(row=2, column=0, sticky='w') if self.run_config['plot_hist_IV'] else frame_trace_IV.grid(row=2, column=5, sticky='w')
+                    frame_trace_IV.grid(row=2, column=0, columnspan=10, sticky='w')
                     tk.Checkbutton(frame_trace_IV, text="Segment: ", variable=self.plot_trace_IV_GV).pack(side='left', anchor='w')
                     tk.Button(frame_trace_IV, text='<', command=lambda: show_trace_IV_GV('prev')).pack(side='left', anchor='w')
                     current_trace_IV_entry = tk.Entry(frame_trace_IV, textvariable=self.current_trace_IV_GV, justify='center', width=8)
@@ -1057,7 +1063,7 @@ class IVscan_GUI:
                     if self.run_config['plot_hist_IVt']: self.time_array = np.arange(full_length) / self.hist_IVt.x_conversion
                     else: self.time_array = np.arange(full_length) / self.hist_GVt.x_conversion
                     frame_trace_It = tk.Frame(self.frame_figure)
-                    frame_trace_It.grid(row=2, column=10, sticky='w') if self.run_config['plot_hist_IVt'] else frame_trace_It.grid(row=2, column=15, sticky='w')
+                    frame_trace_It.grid(row=2, column=10, columnspan=10, sticky='w')
                     tk.Checkbutton(frame_trace_It, text="Fullcycle: ", variable=self.plot_trace_It_Gt).pack(side='left', anchor='w')
                     tk.Button(frame_trace_It, text='<', command=lambda: show_trace_It('prev')).pack(side='left', anchor='w')
                     current_trace_It_entry = tk.Entry(frame_trace_It, textvariable=self.current_trace_It_Gt, justify='center', width=8)
@@ -1273,15 +1279,6 @@ class IVscan_GUI:
         if len(not_valid):
             tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
 
-    def updatetk(self):
-        while not self.queue.empty():
-            try:
-                item: Queue_Item = self.queue.get()
-                item.run()
-            except Exception as E:
-                logger.warning(f'{type(E).__name__}: {E.args}')
-        self.window.after(100, self.updatetk)
-
     def cleanup(self, catagory: Literal['partial', 'all']):
         if hasattr(self, 'I'): del self.I
         if hasattr(self, 'V'): del self.V
@@ -1346,22 +1343,22 @@ class IVscan_export_prompt:
         self.check_raw_I = tk.BooleanVar(self.window, value=False)
         self.check_raw_absI = tk.BooleanVar(self.window, value=False)
         self.check_raw_logI = tk.BooleanVar(self.window, value=True)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_I, text='I').grid(row=1, column=1)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2)
-        tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3)
+        tk.Checkbutton(tab_raw, variable=self.check_raw_V, text='V', state='disabled').grid(row=0, column=1, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_G, text='G').grid(row=0, column=2, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logG, text='logG').grid(row=0, column=3, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_I, text='I').grid(row=1, column=1, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_absI, text='| I |').grid(row=1, column=2, sticky='w')
+        tk.Checkbutton(tab_raw, variable=self.check_raw_logI, text='logI').grid(row=1, column=3, sticky='w')
         # GV
         self.check_GV_axis = tk.BooleanVar(self.window, value=False)
         self.option_GV_count = tk.StringVar(self.window, value='Count')
-        tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0)
-        tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        tk.Checkbutton(tab_GV, variable=self.check_GV_axis, text='Axis').grid(row=0, column=0, sticky='w')
+        tk.OptionMenu(tab_GV, self.option_GV_count, *['Count', 'Count/trace']).grid(row=0, column=1, sticky='w')
         # IV
         self.check_IV_axis = tk.BooleanVar(self.window, value=False)
         self.option_IV_count = tk.StringVar(self.window, value='Count')
-        tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0)
-        tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1)
+        tk.Checkbutton(tab_IV, variable=self.check_IV_axis, text='Axis').grid(row=0, column=0, sticky='w')
+        tk.OptionMenu(tab_IV, self.option_IV_count, *['Count', 'Count/trace']).grid(row=0, column=1, sticky='w')
         # button
         tk.Button(self.window, text='Export', command=self.run).pack(side='top')
 
@@ -1377,7 +1374,10 @@ class IVscan_export_prompt:
         tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
         match self.tabcontrol.index('current'):
             case 0:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 A = self.root.V.ravel()
                 G = IVscan.conductance(self.root.I, self.root.V).ravel()
@@ -1388,7 +1388,10 @@ class IVscan_export_prompt:
                 if self.check_raw_logI.get(): A = np.vstack([A, np.log10(np.abs(self.root.I.ravel()))])
                 np.savetxt(path, A.T, delimiter=",")
             case 1:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_GV.height_per_trace.T if self.option_GV_count.get() == 'Count/trace' else self.root.hist_GV.height.T
                 if self.check_GV_axis.get():
@@ -1399,7 +1402,10 @@ class IVscan_export_prompt:
                 else:
                     np.savetxt(path, count, delimiter=",")
             case 2:
-                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{tabname}.csv', defaultextension='.csv', filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
                 if not path: return
                 count = self.root.hist_IV.height_per_trace.T if self.option_IV_count.get() == 'Count/trace' else self.root.hist_IV.height.T
                 if self.check_IV_axis.get():
@@ -1499,8 +1505,7 @@ class CV_GUI:
         self.frame_figure.pack(side='top', anchor='w')
         self.frame_figure.columnconfigure([0, 5, 10, 15], weight=1)
         self.frame_figure.rowconfigure([0], weight=1)
-        self.queue = Queue()
-        self.updatetk()
+        self.queue = queue
 
     def run(self):
         self.cleanup('partial')
@@ -1519,15 +1524,6 @@ class CV_GUI:
         self.plot_CV.add_data(self.V, self.I)
         self.queue.put(Queue_Item(self.canvas_CV.draw_idle))
 
-    def updatetk(self):
-        while not self.queue.empty():
-            try:
-                item: Queue_Item = self.queue.get()
-                item.run()
-            except Exception as E:
-                logger.warning(f'{type(E).__name__}: {E.args}')
-        self.window.after(100, self.updatetk)
-
     def cleanup(self, catagory: Literal['partial', 'all']):
         if hasattr(self, 'I'): del self.I
         if hasattr(self, 'V'): del self.V
@@ -1539,6 +1535,623 @@ class CV_GUI:
             return
         else:
             self.window.destroy()
+
+
+class Flicker_noise_GUI:
+
+    def __init__(self, iframe: tk.Frame) -> None:
+        self.window = iframe
+        self.export_prompt = Flicker_noise_export_prompt(self)
+        # config frame
+        self.frame_config = tk.Frame(self.window)
+        self.frame_config.pack(side='top', anchor='w')
+        # row 0
+        self.directory_path = tk.StringVar()
+        tk.Label(self.frame_config, text='Path: ').grid(row=0, column=0)
+        tk.Entry(self.frame_config, textvariable=self.directory_path, width=85).grid(row=0, column=1, columnspan=5)
+        tk.Button(self.frame_config, text="Files", bg='#ffe9a2',
+                  command=lambda: _set_directory(self.directory_path, json.dumps(tkinter.filedialog.askopenfilenames(), ensure_ascii=False))).grid(row=0, column=6)
+        tk.Button(self.frame_config, text="Folder", bg='#ffe9a2', command=lambda: _set_directory(self.directory_path, tkinter.filedialog.askdirectory())).grid(row=0, column=7, padx=5)
+        # row 1
+        self.extract_length = tk.IntVar(self.window, value=4000)
+        self.start_from = tk.IntVar(self.window, value=4000)
+        self.I_unit = tk.DoubleVar(self.window, value=1e-6)
+        self.V_unit = tk.DoubleVar(self.window, value=1)
+        self.is_raw = tk.StringVar(self.window, value='raw')
+        self.directory_recursive = tk.BooleanVar(self.window, value=False)
+        tk.Label(self.frame_config, text='Length: ').grid(row=1, column=0)
+        tk.Entry(self.frame_config, textvariable=self.extract_length, justify='center').grid(row=1, column=1)
+        tk.Label(self.frame_config, text='Start: ').grid(row=1, column=2)
+        tk.Entry(self.frame_config, textvariable=self.start_from, justify='center').grid(row=1, column=3)
+        tk.Label(self.frame_config, text='Units (I, V): ').grid(row=1, column=4)
+        frame_units = tk.Frame(self.frame_config)
+        frame_units.grid(row=1, column=5)
+        tk.Entry(frame_units, textvariable=self.I_unit, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_units, textvariable=self.V_unit, justify='center', width=10).pack(side='left')
+        tk.OptionMenu(self.frame_config, self.is_raw, *['raw', 'cut']).grid(row=1, column=6)
+        tk.Checkbutton(self.frame_config, variable=self.directory_recursive, text="Recursive").grid(row=1, column=7, sticky='w')
+        #row 2
+        self.upper = tk.DoubleVar(self.window, value=1)
+        self.lower = tk.DoubleVar(self.window, value=1e-5)
+        self.integrand1 = tk.DoubleVar(self.window, value=100)
+        self.integrand2 = tk.DoubleVar(self.window, value=1000)
+        self.zero_point = tk.DoubleVar(self.window, value=0.5)
+        tk.Label(self.frame_config, text='X=0@G= ').grid(row=2, column=0)
+        tk.Entry(self.frame_config, textvariable=self.zero_point, justify='center').grid(row=2, column=1)
+        tk.Label(self.frame_config, text='Integrand: ').grid(row=2, column=2)
+        frame_integrand = tk.Frame(self.frame_config)
+        frame_integrand.grid(row=2, column=3)
+        tk.Entry(frame_integrand, textvariable=self.integrand1, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_integrand, textvariable=self.integrand2, justify='center', width=10).pack(side='left')
+        tk.Label(self.frame_config, text='G limit: ').grid(row=2, column=4)
+        frame_Glim = tk.Frame(self.frame_config)
+        frame_Glim.grid(row=2, column=5)
+        tk.Entry(frame_Glim, textvariable=self.upper, justify='center', width=10).pack(side='left')
+        tk.Entry(frame_Glim, textvariable=self.lower, justify='center', width=10).pack(side='left')
+        # row 3
+        self.points_per_file = tk.IntVar(self.window, value=1000)
+        self.sampling_rate = tk.IntVar(self.window, value=40000)
+        self.std = tk.DoubleVar(self.window, value=1)
+        tk.Label(self.frame_config, text='Points/File: ').grid(row=3, column=0)
+        tk.Entry(self.frame_config, textvariable=self.points_per_file, justify='center').grid(row=3, column=1)
+        tk.Label(self.frame_config, text='Sampling\nrate: ').grid(row=3, column=2)
+        tk.Entry(self.frame_config, textvariable=self.sampling_rate, justify='center').grid(row=3, column=3)
+        tk.Label(self.frame_config, text='std: ').grid(row=3, column=4)
+        tk.Entry(self.frame_config, textvariable=self.std, justify='center').grid(row=3, column=5)
+        # row 4
+        self.G_min = tk.DoubleVar(self.window, value=0.00001)
+        self.G_max = tk.DoubleVar(self.window, value=1)
+        self.G_bins = tk.IntVar(self.window, value=50)
+        self.G_scale = tk.StringVar(self.window, value='log')
+        tk.Label(self.frame_config, text='G min: ').grid(row=4, column=0)
+        tk.Entry(self.frame_config, textvariable=self.G_min, justify='center').grid(row=4, column=1)
+        tk.Label(self.frame_config, text='G max: ').grid(row=4, column=2)
+        tk.Entry(self.frame_config, textvariable=self.G_max, justify='center').grid(row=4, column=3)
+        tk.Label(self.frame_config, text='G #bins: ').grid(row=4, column=4)
+        tk.Entry(self.frame_config, textvariable=self.G_bins, justify='center').grid(row=4, column=5)
+        tk.Label(self.frame_config, text='G scale: ').grid(row=4, column=6)
+        tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=4, column=7)
+        # row 5
+        self.NP_min = tk.DoubleVar(self.window, value=0.0000001)
+        self.NP_max = tk.DoubleVar(self.window, value=0.01)
+        self.NP_bins = tk.IntVar(self.window, value=50)
+        self.NP_scale = tk.StringVar(self.window, value='log')
+        tk.Label(self.frame_config, text='NP min: ').grid(row=5, column=0)
+        tk.Entry(self.frame_config, textvariable=self.NP_min, justify='center').grid(row=5, column=1)
+        tk.Label(self.frame_config, text='NP max: ').grid(row=5, column=2)
+        tk.Entry(self.frame_config, textvariable=self.NP_max, justify='center').grid(row=5, column=3)
+        tk.Label(self.frame_config, text='NP #bins: ').grid(row=5, column=4)
+        tk.Entry(self.frame_config, textvariable=self.NP_bins, justify='center').grid(row=5, column=5)
+        tk.Label(self.frame_config, text='NP scale: ').grid(row=5, column=6)
+        tk.OptionMenu(self.frame_config, self.NP_scale, *['log', 'linear']).grid(row=5, column=7)
+        # row 6
+        tk.Label(self.frame_config, text='Colorbar: ').grid(row=6, column=0)
+        self.colorbar_conf = tk.Text(self.frame_config, height=3, wrap='none', undo=True, maxundo=-1)
+        self.colorbar_conf.bind('<<Modified>>', self.colorbar_apply)
+        self.colorbar_conf.grid(row=6, column=1, columnspan=5, sticky='w')
+        self.colorbar_conf.insert(
+            '0.0',
+            '{"red":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n "green":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n "blue": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}'
+        )
+        self.run_button = tk.Button(self.frame_config, text='Run', bg='lime', command=self.run)
+        self.run_button.grid(row=6, column=6, padx=10)
+        self.is_run = False
+        try:
+            import yaml
+            tk.Button(self.frame_config, text='Import', command=self.import_setting).grid(row=6, column=7)
+        except ImportError:
+            logger.warning('Module PyYAML was not found. Import/export settings can not be used.')
+        tk.Button(self.frame_config, text='Export', command=self.export_prompt.show).grid(row=6, column=8)
+        # is_plot frame
+        self.frame_is_plot = tk.Frame(self.window)
+        self.frame_is_plot.pack(side='top', anchor='w')
+        self.plot_hist_NP = tk.BooleanVar(self.window, value=False)
+        self.plot_line_NP = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_Gmean = tk.BooleanVar(self.window, value=True)
+        self.plot_hist_G = tk.BooleanVar(self.window, value=False)
+        self.plot_line_Gt = tk.BooleanVar(self.window, value=False)
+        self.plot_line_PSD = tk.BooleanVar(self.window, value=False)
+        tk.Label(self.frame_is_plot, text='Plot: ').pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram NP-G', variable=self.plot_hist_NP).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Dotted NP-G', variable=self.plot_line_NP).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram Gmean', variable=self.plot_hist_Gmean).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Histogram G', variable=self.plot_hist_G).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Line G-t', variable=self.plot_line_Gt).pack(side='left')
+        tk.Checkbutton(self.frame_is_plot, text='Line PSD-Freq', variable=self.plot_line_PSD).pack(side='left')
+        # figure frame
+        self.frame_figure = tk.Frame(self.window)
+        self.frame_figure.pack(side='top', anchor='w')
+        self.frame_figure.columnconfigure([0, 5, 10, 15], weight=1)
+        self.frame_figure.rowconfigure([0], weight=1)
+        # status frame
+        self.frame_status = tk.Frame(self.window)
+        self.frame_status.pack(side='bottom', anchor='w')
+        tk.Label(self.frame_status, text='#Traces: ').pack(side='left')
+        self.status_traces = tk.Label(self.frame_status, text=0)
+        self.status_traces.pack(side='left')
+        tk.Label(self.frame_status, text='File: ', padx=20).pack(side='left')
+        self.status_last_file = tk.Label(self.frame_status, text='Waiting')
+        self.status_last_file.pack(side='left')
+        self.queue = queue
+        if ini_config:
+            if 'Flicker_noise' in ini_config:
+                self.import_setting(ini_config['Flicker_noise'])
+
+    def colorbar_apply(self, *args):
+        try:
+            colorbar_conf = self.colorbar_conf.get('0.0', 'end')
+            if colorbar_conf != "\n":
+                cmap = json.loads(colorbar_conf)
+                if self.run_config['plot_hist_NP']:
+                    self.hist_GS.set_cmap(cmap=cmap)
+                    self.canvas_GS.draw_idle()
+                if self.run_config['plot_hist_Gt']:
+                    self.hist_Gt.set_cmap(cmap=cmap)
+                    self.canvas_Gt.draw_idle()
+        except Exception as E:
+            return
+        finally:
+            self.colorbar_conf.edit_modified(False)
+
+    def run(self):
+        match self.is_run:
+            case False:
+                self.cleanup('partial')
+                full_length = (self.start_from.get() + self.extract_length.get()) * 2
+                self.run_config = {
+                    "length": self.extract_length.get(),
+                    "start": self.start_from.get(),
+                    "units": (self.I_unit.get(), self.V_unit.get()),
+                    'data_type': self.is_raw.get(),
+                    'recursive': self.directory_recursive.get(),
+                    "upper": self.upper.get(),
+                    "lower": self.lower.get(),
+                    "integrand": sorted([self.integrand1.get(), self.integrand2.get()]),
+                    "zero_point": self.zero_point.get(),
+                    'num_files': full_length // self.points_per_file.get() + 3,
+                    'sampling_rate': self.sampling_rate.get(),
+                    'std': self.std.get(),
+                    'G_scale': self.G_scale.get(),
+                    'NP_scale': self.NP_scale.get(),
+                    'plot_hist_NP': self.plot_hist_NP.get(),
+                    'plot_line_NP': self.plot_line_NP.get(),
+                    'plot_hist_Gmean': self.plot_hist_Gmean.get(),
+                    'plot_hist_G': self.plot_hist_G.get(),
+                    'plot_line_Gt': self.plot_line_Gt.get(),
+                    'plot_line_PSD': self.plot_line_PSD.get()
+                }
+                path = self.directory_path.get()
+                if not os.path.isdir(path):
+                    try:
+                        path = json.loads(path)
+                    except Exception as E:
+                        tkinter.messagebox.showerror('Error', 'Invalid directory')
+                        return
+                for item in self.frame_figure.winfo_children():
+                    item.destroy()
+                gc.collect()
+                self.G = np.empty((0, self.run_config['length']))
+                self.Gmean = np.array([])
+                self.NP = np.array([])
+                self.t = np.arange(self.run_config['length']) / self.run_config['sampling_rate']
+                self.freq = Flicker_noise.scipy.fft.fftshift(Flicker_noise.scipy.fft.fftfreq(self.run_config['length'], 1 / self.run_config['sampling_rate']))
+                self.PSD = np.empty((0, self.freq.size))
+                # plot NP-Gmean
+                if self.run_config['plot_line_NP'] or self.run_config['plot_hist_NP']:
+                    self.line_NP = Flicker_noise.Flicker_noise_data(self.run_config['sampling_rate'], self.run_config['G_scale'], self.run_config['NP_scale'])
+                    self.n = tk.DoubleVar(self.window, value=1.0)
+                    self.auto = tk.BooleanVar(self.window, value=False)
+                    frame_n = tk.Frame(self.frame_figure)
+                    frame_n.grid(row=2, column=0, columnspan=10, sticky='w')
+                    tk.Label(frame_n, text='n: ').pack(side='left')
+                    self.n_entry = tk.Entry(frame_n, textvariable=self.n, justify='left', width=5)
+                    self.n_entry.pack(side='left')
+                    self.set_n_button = tk.Button(frame_n, text='Set', bg='lime', command=self.set_n)
+                    self.set_n_button.pack(side='left', padx=10)
+                    self.auto_n_button = tk.Checkbutton(frame_n, variable=self.auto, text='Auto', command=self.set_n)
+                    self.auto_n_button.pack(side='left')
+                if self.run_config['plot_hist_NP']:
+                    self.hist_NP = Flicker_noise.Flicker_noise_data(self.run_config['sampling_rate'], self.run_config['G_scale'], self.run_config['NP_scale'])
+                    self.canvas_hist_NP = FigureCanvasTkAgg(self.hist_NP.fig, self.frame_figure)
+                    self.canvas_hist_NP.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
+                    self.navtool_hist_NP = NavigationToolbar2Tk(self.canvas_hist_NP, self.frame_figure, pack_toolbar=False)
+                    self.navtool_hist_NP.grid(row=1, column=0, columnspan=4, sticky='w')
+                    self.canvas_hist_NP.draw_idle()
+                if self.run_config['plot_line_NP']:
+                    self.line_NP.ax.set_prop_cycle(color='#1f77b4')
+                    self.canvas_line_NP = FigureCanvasTkAgg(self.line_NP.fig, self.frame_figure)
+                    self.canvas_line_NP.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
+                    self.navtool_line_NP = NavigationToolbar2Tk(self.canvas_line_NP, self.frame_figure, pack_toolbar=False)
+                    self.navtool_line_NP.grid(row=1, column=5, columnspan=4, sticky='w')
+                    self.canvas_line_NP.draw_idle()
+                # hist G
+                if self.run_config['plot_hist_Gmean']:
+                    self.hist_Gmean = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.hist_Gmean.ax.set_ylabel('Count')
+                    self.canvas_Gmean = FigureCanvasTkAgg(self.hist_Gmean.fig, self.frame_figure)
+                    self.canvas_Gmean.get_tk_widget().grid(row=0, column=10, columnspan=5, pady=10)
+                    self.navtool_Gmean = NavigationToolbar2Tk(self.canvas_Gmean, self.frame_figure, pack_toolbar=False)
+                    self.navtool_Gmean.grid(row=1, column=10, columnspan=4, sticky='w')
+                    self.canvas_Gmean.draw_idle()
+                if self.run_config['plot_hist_G']:
+                    self.hist_G = STM_bj.Hist_G([self.G_min.get(), self.G_max.get()], self.G_bins.get(), self.G_scale.get())
+                    self.canvas_G = FigureCanvasTkAgg(self.hist_G.fig, self.frame_figure)
+                    self.canvas_G.get_tk_widget().grid(row=0, column=15, columnspan=5, pady=10)
+                    self.navtool_G = NavigationToolbar2Tk(self.canvas_G, self.frame_figure, pack_toolbar=False)
+                    self.navtool_G.grid(row=1, column=15, columnspan=4, sticky='w')
+                    self.canvas_G.draw_idle()
+                if self.run_config['plot_hist_G'] or self.run_config['plot_hist_Gmean']:
+                    self.autoscale_G = tk.BooleanVar(self.window, value=True)
+                    tk.Checkbutton(self.frame_figure, variable=self.autoscale_G, text="Autoscale").grid(row=2, column=10, columnspan=10, sticky='w')
+                # line Gt
+                class Line2D:
+
+                    def __init__(self):
+                        self.fig, self.ax = plt.subplots()
+
+                if self.run_config['plot_line_Gt']:
+                    self.line_Gt = Line2D()
+                    self.line_Gt.ax.set(xlabel='Time (s)', ylabel='Conductance ($G/G_0$)', yscale=self.run_config['G_scale'], ylim=(self.run_config['lower'], self.run_config['upper']))
+                    self.line_Gt.ax.set_prop_cycle(color='#1f77b4')
+                    self.canvas_line_Gt = FigureCanvasTkAgg(self.line_Gt.fig, self.frame_figure)
+                    self.canvas_line_Gt.get_tk_widget().grid(row=0, column=20, columnspan=5, pady=10)
+                    self.navtool_line_Gt = NavigationToolbar2Tk(self.canvas_line_Gt, self.frame_figure, pack_toolbar=False)
+                    self.navtool_line_Gt.grid(row=1, column=20, columnspan=4, sticky='w')
+                    self.canvas_line_Gt.draw_idle()
+                if self.run_config['plot_line_PSD']:
+                    self.line_PSD = Line2D()
+                    self.line_PSD.ax.set(xlabel='Frequency (Hz)', ylabel='Noise PSD', xscale='log', yscale='log', xlim=self.run_config['integrand'])
+                    self.line_PSD.ax.set_prop_cycle(color='#1f77b4')
+                    self.canvas_line_PSD = FigureCanvasTkAgg(self.line_PSD.fig, self.frame_figure)
+                    self.canvas_line_PSD.get_tk_widget().grid(row=0, column=25, columnspan=5, pady=10)
+                    self.navtool_line_PSD = NavigationToolbar2Tk(self.canvas_line_PSD, self.frame_figure, pack_toolbar=False)
+                    self.navtool_line_PSD.grid(row=1, column=25, columnspan=4, sticky='w')
+                    self.canvas_line_PSD.draw_idle()
+                if self.run_config['plot_line_Gt'] or self.run_config['plot_line_PSD']:
+
+                    def show_trace_G(action: Literal['next', 'prev', 'show']):
+                        trace = self.current_trace_G.get()
+                        if action == 'show':
+                            if -self.G.shape[0] <= trace < self.G.shape[0]:
+                                if self.run_config['plot_line_Gt']:
+                                    if self.current_lines_Gt: self.current_lines_Gt.set_data(self.t, self.G[trace])
+                                    else: self.current_lines_Gt = self.line_Gt.ax.plot(self.t, self.G[trace], color='k')[0]
+                                    self.canvas_line_Gt.draw_idle()
+                                if self.run_config['plot_line_PSD']:
+                                    if self.current_lines_PSD: self.current_lines_PSD.set_data(self.freq, self.PSD[trace])
+                                    else: self.current_lines_PSD = self.line_PSD.ax.plot(self.freq, self.PSD[trace], color='k')[0]
+                                    self.canvas_line_PSD.draw_idle()
+                        elif action == 'next':
+                            if -self.G.shape[0] <= trace + 1 < self.G.shape[0]:
+                                self.current_trace_G.set(trace + 1)
+                        elif action == 'prev':
+                            if -self.G.shape[0] <= trace - 1 < self.G.shape[0]:
+                                self.current_trace_G.set(trace - 1)
+
+                    self.current_trace_G = tk.IntVar(self.window, value=-1)
+                    self.current_lines_Gt = None
+                    self.current_lines_PSD = None
+                    frame_trace_G = tk.Frame(self.frame_figure)
+                    frame_trace_G.grid(row=2, column=20, columnspan=10, sticky='w')
+                    tk.Label(frame_trace_G, text="Trace: ").pack(side='left', anchor='w')
+                    tk.Button(frame_trace_G, text='<', command=lambda: show_trace_G('prev')).pack(side='left', anchor='w')
+                    current_trace_G_entry = tk.Entry(frame_trace_G, textvariable=self.current_trace_G, justify='center', width=8)
+                    current_trace_G_entry.pack(side='left', anchor='w')
+                    tk.Button(frame_trace_G, text='>', command=lambda: show_trace_G('next')).pack(side='left', anchor='w')
+                    current_trace_G_entry.bind("<Down>", lambda *args: show_trace_G('prev'))
+                    current_trace_G_entry.bind("<Up>", lambda *args: show_trace_G('next'))
+                    self.current_trace_G.trace_add('write', lambda *args: show_trace_G('show'))
+                self.colorbar_apply()
+                self.status_traces.config(text=0)
+                self.window.update_idletasks()
+                if self.run_config['data_type'] == 'raw': self.pending = list()
+                self._lock = threading.RLock()
+                threading.Thread(target=self.add_data, args=(path, )).start()
+                if isinstance(path, list): return
+                try:
+                    from watchdog.observers import Observer
+                    self.observer = Observer()
+                    self.observer.schedule(self.FileHandler(self), path=path, recursive=self.run_config['recursive'])
+                    self.observer.start()
+                    logger.info(f'Start observer: {path}')
+                    atexit.register(self.observer.stop)
+                    self.run_button.config(text='Stop', bg='red')
+                    self.is_run = True
+                except ImportError:
+                    logger.warning('Module watchdog was not found. Data can not be updated in realtime.')
+            case True:
+                self.run_button.config(text='Run', bg='lime')
+                self.is_run = False
+                threading.Thread(target=self.observer.stop).start()
+                logger.info(f'Stop observer')
+                gc.collect()
+
+    try:
+        from watchdog.events import FileSystemEventHandler
+
+        class FileHandler(FileSystemEventHandler):
+
+            def __init__(self, GUI) -> None:
+                self.GUI = GUI
+
+            def on_created(self, event):
+                from watchdog.events import FileCreatedEvent
+                if isinstance(event, FileCreatedEvent):
+                    if (event.src_path.endswith('.txt')):
+                        try:
+                            with self.GUI._lock:
+                                if os.path.getsize(event.src_path) == 0:
+                                    time.sleep(0.5)
+                                    if os.path.getsize(event.src_path) == 0: raise RuntimeWarning('Empty file')
+                            self.GUI.add_data(event.src_path)
+                        except Exception as E:
+                            logger.warning(f'Add data failed: {event.src_path}: {type(E).__name__}: {E.args}')
+    except ImportError:
+        pass
+
+    def add_data(self, path: str | list):
+        if isinstance(path, str):
+            self.queue.put(Queue_Item(self.status_last_file.config, text=path, bg='yellow'))
+            if os.path.isdir(path):
+                if not os.listdir(path):  # empty directory
+                    self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
+                    return
+        elif isinstance(path, list):
+            self.queue.put(Queue_Item(self.status_last_file.config, text=f"{len(path)} files" if len(path) > 1 else path[0], bg='yellow'))
+        try:
+            logger.debug(f'Add data: {path}')
+            match self.run_config['data_type']:
+                case 'raw':
+                    with self._lock:
+                        self.pending.append(Flicker_noise.conductance(*(Flicker_noise.load_data(path, max_workers=GUI.CPU_threads.get())[::-1] * np.expand_dims(self.run_config['units'], 1))))
+                        if len(self.pending) > self.run_config['num_files']: del self.pending[:-self.run_config['num_files']]
+                        G_raw = np.concatenate(self.pending)
+                    G = Flicker_noise.extract_data(G_raw, length=self.run_config['length'], start_from=self.run_config['start'], zero_point=self.run_config['zero_point'], units=[1, 1])
+                    if G.size == 0:
+                        self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
+                        return
+                    else:
+                        ind = np.where(G[-1, -1] == self.pending[-1])[0]
+                        if ind.size: self.pending = [self.pending[-1][ind[-1]:]]
+                        else: self.pending = []
+                case 'cut':
+                    df = Flicker_noise.load_data_with_metadata(path, **self.run_config, max_workers=GUI.CPU_threads.get())['data']
+                    length = df.apply(lambda x: x.shape[-1])
+                    max_length = max(*length, self.run_config['length'])
+                    df[length < max_length] = df[length < max_length].apply(lambda x: np.pad(x, (0, max_length - x.shape[-1]), 'constant', constant_values=0))
+                    G = np.stack(df)
+                    self.G = np.empty((0, max_length))
+                    self.freq = Flicker_noise.scipy.fft.fftshift(Flicker_noise.scipy.fft.fftfreq(max_length, 1 / self.run_config['sampling_rate']))
+                    self.PSD = np.empty((0, self.freq.size))
+        except Exception as E:
+            logger.warning(f'Failed to extract files: {path}: {type(E).__name__}: {E.args}')
+            self.queue.put(Queue_Item(self.status_last_file.config, bg='red'))
+            return
+        f = (((G < self.run_config['upper']) & (G > self.run_config['lower'])).all(axis=1)) & (G.std(
+            axis=1) < self.run_config['std'] if self.run_config['G_scale'] == 'linear' else np.log10(np.abs(G)).std(axis=1) < self.run_config['std'])
+        G = G[f]
+        if G.size > 0:
+            self.G = np.vstack([self.G, G])
+            self.Gmean = np.concatenate([self.Gmean, G.mean(axis=1)])
+            PSD = Flicker_noise.PSD(G, self.run_config['sampling_rate'], return_freq=False)
+            NP = Flicker_noise.noise_power(PSD, self.freq, integrand=self.run_config['integrand'])
+            self.PSD = np.vstack([self.PSD, PSD])
+            self.NP = np.concatenate([self.NP, NP])
+            if self.run_config['plot_line_NP'] or self.run_config['plot_hist_NP']:
+                self.set_n()
+            if self.run_config['plot_hist_Gmean']:
+                self.hist_Gmean.add_data(self.Gmean, set_ylim=self.autoscale_G.get())
+                self.queue.put(Queue_Item(self.canvas_Gmean.draw_idle))
+            if self.run_config['plot_hist_G']:
+                self.hist_G.add_data(self.G, set_ylim=self.autoscale_G.get())
+                self.queue.put(Queue_Item(self.canvas_G.draw_idle))
+            if self.run_config['plot_line_Gt'] or self.run_config['plot_line_PSD']:
+                if self.current_trace_G.get() < 0: self.queue.put(Queue_Item(self.current_trace_G.set, self.current_trace_G.get()))
+            self.queue.put(Queue_Item(self.status_traces.config, text=self.G.shape[0]))
+        self.queue.put(Queue_Item(self.status_last_file.config, bg='lime'))
+
+    def set_n(self):
+        if self.auto.get():
+            self.set_n_button.config(state='disabled', bg='white')
+            self.n_entry.config(state='readonly')
+        else:
+            self.set_n_button.config(state='normal', bg='lime')
+            self.n_entry.config(state='normal')
+        n = self.line_NP.plot(self.Gmean, self.NP, self.n.get(), auto_fit=self.auto.get())
+        self.queue.put(Queue_Item(self.n.set, round(n, 2)))
+        if self.run_config['plot_line_NP']:
+            self.queue.put(Queue_Item(self.canvas_line_NP.draw_idle))
+        if self.run_config['plot_hist_NP']:
+            self.line_NP.hist2d((self.G_min.get(), self.G_max.get()), (self.NP_min.get(), self.NP_max.get()), self.G_bins.get(), self.NP_bins.get(), fig=self.hist_NP.fig, ax=self.hist_NP.ax)
+            self.queue.put(Queue_Item(self.canvas_hist_NP.draw_idle))
+
+    def import_setting(self, data: dict = None):
+        if not data:
+            path = tkinter.filedialog.askopenfilename(filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+            if not path: return
+            import yaml
+            with open(path, mode='r', encoding='utf-8') as f:
+                data = yaml.load(f.read(), yaml.SafeLoader)['Flicker_noise']
+        settings = {
+            'Data type': self.is_raw,
+            'Recursive': self.directory_recursive,
+            'Length': self.extract_length,
+            "Start from": self.start_from,
+            'I unit': self.I_unit,
+            'V unit': self.V_unit,
+            'X=0@G=': self.zero_point,
+            "Integrand1": self.integrand1,
+            "Integrand2": self.integrand2,
+            'G upper': self.upper,
+            'G lower': self.lower,
+            'points_per_file': self.points_per_file,
+            'Sampling rate': self.sampling_rate,
+            'std': self.std,
+            'G min': self.G_min,
+            'G max': self.G_max,
+            'G #bins': self.G_bins,
+            'G scale': self.G_scale,
+            'NP min': self.NP_min,
+            'NP max': self.NP_max,
+            'NP #bins': self.NP_bins,
+            'NP scale': self.NP_scale,
+            'hist_GV': self.plot_hist_NP,
+            'hist_IV': self.plot_line_NP,
+            'hist_IVt': self.plot_hist_G,
+            'hist_GVt': self.plot_hist_Gmean,
+            'line_Gt': self.plot_line_Gt,
+            'line_PSD': self.plot_line_PSD
+        }
+        not_valid = list()
+        for setting, attribute in settings.items():
+            try:
+                if setting in data: attribute.set(data[setting])
+            except Exception as E:
+                not_valid.append(setting)
+        try:
+            if 'Colorbar' in data:
+                self.colorbar_conf.delete('1.0', 'end')
+                self.colorbar_conf.insert('0.0', data['Colorbar'])
+        except Exception as E:
+            not_valid.append(setting)
+        if len(not_valid):
+            tkinter.messagebox.showwarning('Warning', f'Invalid values:\n{", ".join(not_valid)}')
+
+    def cleanup(self, catagory: Literal['partial', 'all']):
+        if hasattr(self, 'G'): del self.G
+        if hasattr(self, 'Gmeans'): del self.Gmean
+        if hasattr(self, 'freq'): del self.freq
+        if hasattr(self, 'PSD'): del self.PSD
+        if hasattr(self, 'NP'): del self.NP
+        if hasattr(self, 'line_NP'):
+            self.line_NP.fig.clear()
+            del self.line_NP
+        if catagory == 'partial':
+            gc.collect()
+            return
+        else:
+            if hasattr(self, 'observer'):
+                self.observer.stop()
+                del self.observer
+            self.export_prompt.window.destroy()
+            self.window.destroy()
+
+
+class Flicker_noise_export_prompt:
+
+    def __init__(self, root: Flicker_noise_GUI, **kwargs) -> None:
+        self.window = tk.Toplevel()
+        self.hide()
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
+        self.window.title('Export')
+        self.window.resizable(False, False)
+        self.root = root
+        self.kwargs = kwargs
+        # tab
+        self.tabcontrol = ttk.Notebook(self.window)
+        self.tabcontrol.pack(side='top')
+        tab_NP = ttk.Frame(self.tabcontrol)
+        tab_settings = ttk.Frame(self.tabcontrol)
+        self.tabcontrol.add(tab_NP, text='NP')
+        try:
+            import yaml
+            self.tabcontrol.add(tab_settings, text='Settings')
+        except ImportError:
+            pass
+        # NP
+        self.check_G = tk.BooleanVar(self.window, value=False)
+        self.check_NP0 = tk.BooleanVar(self.window, value=False)
+        self.check_NP1 = tk.BooleanVar(self.window, value=False)
+        self.check_NP2 = tk.BooleanVar(self.window, value=False)
+        self.check_logG = tk.BooleanVar(self.window, value=True)
+        self.check_logNP0 = tk.BooleanVar(self.window, value=True)
+        self.check_logNP1 = tk.BooleanVar(self.window, value=True)
+        self.check_logNP2 = tk.BooleanVar(self.window, value=True)
+        tk.Checkbutton(tab_NP, variable=self.check_G, text='G').grid(row=0, column=0, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_NP0, text='NP').grid(row=1, column=0, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_NP1, text='NP/G').grid(row=2, column=0, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_NP2, text='NP/G²').grid(row=3, column=0, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_logG, text='logG').grid(row=0, column=1, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_logNP0, text='logNP').grid(row=1, column=1, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_logNP1, text='log(NP/G)').grid(row=2, column=1, sticky='w')
+        tk.Checkbutton(tab_NP, variable=self.check_logNP2, text='log(NP/G²)').grid(row=3, column=1, sticky='w')
+        # button
+        tk.Button(self.window, text='Export', command=self.run).pack(side='top')
+
+    def show(self):
+        self.window.deiconify()
+        self.window.grab_set()
+
+    def hide(self):
+        self.window.withdraw()
+        self.window.grab_release()
+
+    def run(self):
+        tabname = GUI.tabcontrol.tab(GUI.tabcontrol.index('current'), 'text')
+        match self.tabcontrol.index('current'):
+            case 0:
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                            initialfile=f'{tabname}.csv',
+                                                            defaultextension='.csv',
+                                                            filetypes=[('Comma delimited', '*.csv'), ('All Files', '*.*')])
+                if not path: return
+                A = []
+                if self.check_G.get(): A.append(self.root.Gmean)
+                if self.check_NP0.get(): A.append(self.root.NP)
+                if self.check_NP1.get(): A.append(self.root.NP/self.root.Gmean)
+                if self.check_NP2.get(): A.append(self.root.NP/(self.root.Gmean**2))
+                if self.check_logG.get(): A.append(np.log10(np.abs(self.root.Gmean)))
+                if self.check_logNP0.get(): A.append(np.log10(np.abs(self.root.NP)))
+                if self.check_logNP1.get(): A.append(np.log10(np.abs(self.root.NP/self.root.Gmean)))
+                if self.check_logNP2.get(): A.append(np.log10(np.abs(self.root.NP/(self.root.Gmean**2))))
+                A=np.vstack(A)
+                np.savetxt(path, A.T, delimiter=",")
+            case 1:
+                import yaml
+                path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile='config.yaml', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('All Files', '*.*')])
+                if not path: return
+                data = {
+                    'Data type': self.root.is_raw.get(),
+                    'Recursive': self.root.directory_recursive.get(),
+                    'Length': self.root.extract_length.get(),
+                    "Start from": self.root.start_from.get(),
+                    'I unit': self.root.I_unit.get(),
+                    'V unit': self.root.V_unit.get(),
+                    'X=0@G=': self.root.zero_point.get(),
+                    "Integrand1": self.root.integrand1.get(),
+                    "Integrand2": self.root.integrand2.get(),
+                    'G upper': self.root.upper.get(),
+                    'G lower': self.root.lower.get(),
+                    'points_per_file': self.root.points_per_file.get(),
+                    'Sampling rate': self.root.sampling_rate.get(),
+                    'std': self.root.std.get(),
+                    'G min': self.root.G_min.get(),
+                    'G max': self.root.G_max.get(),
+                    'G #bins': self.root.G_bins.get(),
+                    'G scale': self.root.G_scale.get(),
+                    'NP min': self.root.NP_min.get(),
+                    'NP max': self.root.NP_max.get(),
+                    'NP #bins': self.root.NP_bins.get(),
+                    'NP scale': self.root.NP_scale.get(),
+                    'hist_GV': self.root.plot_hist_NP.get(),
+                    'hist_IV': self.root.plot_line_NP.get(),
+                    'hist_IVt': self.root.plot_hist_G.get(),
+                    'hist_GVt': self.root.plot_hist_Gmean.get(),
+                    'line_Gt': self.root.plot_line_Gt.get(),
+                    'line_PSD': self.root.plot_line_PSD.get(),
+                    'Colorbar': self.root.colorbar_conf.get('0.0', 'end')
+                }
+                if os.path.exists(path):
+                    with open(path, mode='r', encoding='utf-8') as f:
+                        old_data = yaml.load(f.read(), yaml.SafeLoader)
+                        if old_data: old_data.update({'Flicker_noise': data})
+                        else: old_data = {'Flicker_noise': data}
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump(old_data, f, yaml.SafeDumper)
+                else:
+                    with open(path, mode='w', encoding='utf-8') as f:
+                        data = yaml.dump({'Flicker_noise': data}, f, yaml.SafeDumper)
+        self.hide()
 
 class Logging_GUI(logging.Handler):
 
@@ -1557,8 +2170,7 @@ class Logging_GUI(logging.Handler):
         tk.OptionMenu(buttomframe, loglevel, *['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], command=self.set_level).pack(side='left')
         tk.Button(buttomframe, text='Save', command=self.save).pack(side='left')
         tk.Button(buttomframe, text='Clear', command=self.clear).pack(side='left')
-        self.queue = Queue()
-        self.updatetk()
+        self.queue = queue
 
     def emit(self, record):
         self.queue.put(Queue_Item(self.logtext.config, state='normal'))
@@ -1571,7 +2183,10 @@ class Logging_GUI(logging.Handler):
 
     def save(self):
         import datetime
-        path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True, initialfile=f'{datetime.datetime.now().strftime("%Y%m%dT%H%M%S")}.log', defaultextension='.log', filetypes=[('Text Files', '*.log'), ('All Files', '*.*')])
+        path = tkinter.filedialog.asksaveasfilename(confirmoverwrite=True,
+                                                    initialfile=f'{datetime.datetime.now().strftime("%Y%m%dT%H%M%S")}.log',
+                                                    defaultextension='.log',
+                                                    filetypes=[('Text Files', '*.log'), ('All Files', '*.*')])
         if path:
             text = self.logtext.get('0.0', 'end').strip()
             with open(path, mode='w', encoding='utf-8') as f:
@@ -1598,12 +2213,35 @@ class Logging_GUI(logging.Handler):
         self.window.withdraw()
 
 
+class Queue_Item:
+
+    def __init__(self, func, *args, **kwargs) -> None:
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+
+    def run(self):
+        self.func(*self.args, **self.kwargs)
+
+
+def updatetk():
+    while not queue.empty():
+        try:
+            item: Queue_Item = queue.get()
+            item.run()
+        except Exception as E:
+            logger.warning(f'{type(E).__name__}: {E.args}')
+    root.after(100, updatetk)
+
+
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # PyInstaller
     import matplotlib
     matplotlib.use('TkAgg')
     plt.ioff()
     root = tk.Tk()
+    queue = Queue()
+    updatetk()
     import argparse
     parser = argparse.ArgumentParser(description='Run GUI')
     parser.add_argument('--level', type=str, default='WARNING')

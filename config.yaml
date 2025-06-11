@@ -77,3 +77,35 @@
     \ \"green\":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n \"\
     blue\": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}"
     
+"Flicker_noise":
+  "Data type": "raw"
+  "Recursive": false
+  "Length": 4000
+  "Start from": 4000
+  "I unit": 1.0e-06
+  "V unit": 1.0
+  "X=0@G=": 0.5
+  "Integrand1": 100.0
+  "Integrand2": 1000.0
+  "G upper": 1.0
+  "G lower": 1.0e-05
+  "points_per_file": 1000
+  "Sampling rate": 40000
+  "std": 1.0
+  "G min": 1.0e-05
+  "G max": 1.0
+  'G #bins': 50
+  "G scale": log
+  "NP min": 1.0e-07
+  "NP max": 0.01
+  'NP #bins': 50
+  "NP scale": log
+  "hist_GV": false
+  "hist_GVt": true
+  "hist_IV": true
+  "hist_IVt": false
+  "line_Gt": false
+  "line_PSD": false
+  "Colorbar": "{\"red\":  [[0,1,1],[0.05,0,0],[0.1,0,0],[0.15,1,1],[0.3,1,1],[1,1,1]],\n\
+    \ \"green\":[[0,1,1],[0.05,0,0],[0.1,1,1],[0.15,1,1],[0.3,0,0],[1,0,0]],\n \"\
+    blue\": [[0,1,1],[0.05,1,1],[0.1,0,0],[0.15,0,0],[0.3,0,0],[1,1,1]]}\n"

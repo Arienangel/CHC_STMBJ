@@ -38,7 +38,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
     return np.empty((0, length))
 
 
-def PSD(G: np.ndarray, sampling_rate: float = 40000) -> tuple[np.ndarray, np.ndarray]:
+def PSD(G: np.ndarray, sampling_rate: float = 40000, *, return_freq: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """
     Args:
         G (np.ndarray): 2D G array with shape (trace, length)
@@ -51,7 +51,10 @@ def PSD(G: np.ndarray, sampling_rate: float = 40000) -> tuple[np.ndarray, np.nda
     dt = 1 / sampling_rate
     n = G.shape[1]
     t = n / sampling_rate
-    return np.stack([(dt**2 / t) * np.abs(scipy.fft.fftshift(scipy.fft.fft(g)))**2 for g in G]), scipy.fft.fftshift(scipy.fft.fftfreq(n, dt))
+    if return_freq:
+        return np.stack([(dt**2 / t) * np.abs(scipy.fft.fftshift(scipy.fft.fft(g)))**2 for g in G]), scipy.fft.fftshift(scipy.fft.fftfreq(n, dt))
+    else:
+        return np.stack([(dt**2 / t) * np.abs(scipy.fft.fftshift(scipy.fft.fft(g)))**2 for g in G])
 
 
 def noise_power(PSD: np.ndarray, freq: np.ndarray, integrand: list = [100, 1000]) -> np.ndarray:
