@@ -45,6 +45,7 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
 def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: float | np.ndarray) -> np.ndarray:
     """
     Gaussian distribution curve
+    If a, u, s is array, return multiple gaussion functions
 
     Args:
         x (ndarray): input value
@@ -53,7 +54,7 @@ def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: flo
         s (float | np.ndarray): standard derivative
 
     Returns:
-        x (ndarray): output value
+        y (ndarray): output value
     """
     if isinstance(a, np.ndarray):
         return np.expand_dims(a, axis=1) * np.exp(-((x - np.expand_dims(u, axis=1)) / np.expand_dims(s, axis=1))**2 / 2)
@@ -70,9 +71,32 @@ def multi_gaussian(x: np.ndarray, *args: float):
         args (float): a1, a2, a3..., u1, u2, u3..., s1, s2, s3...
 
     Returns:
-        x (ndarray): output value
+        y (ndarray): output value
     """
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
+
+
+def gaussian2d(xy: list[np.ndarray], a: float, ux: float, uy: float, sx: float, sy: float, theta: float=0) -> np.ndarray:
+    """
+    2D Gaussian distribution surface
+
+    Args:
+        xy (list): list of x and y array
+        a (float): peak height
+        ux (float): average of x
+        uy (float): average of y
+        sx (float): standard derivative of x
+        sy (float): standard derivative of y
+        theta (float, optional): rotation angle
+
+    Returns:
+        z (ndarray): output value
+    """
+    x, y = xy
+    i=(np.cos(theta)/sx)**2/2+(np.sin(theta)/sy)**2/2
+    j=np.sin(2*theta)/(2*sx**2)-np.sin(2*theta)/(2*sy**2)
+    k=(np.sin(theta)/sx)**2/2+(np.cos(theta)/sy)**2/2
+    return a * np.exp(-i*(x-ux)**2-j*(x-ux)*(y-uy)-k*(y-uy)**2)
 
 
 def get_correlation_matrix(A: np.ndarray, bins: np.ndarray) -> np.ndarray:
@@ -457,7 +481,7 @@ class Hist2D:
                 logging.warning(f'Least-square minimization failed at {axis}={label}')
                 return default_values
 
-        if len(default_values)!=3: raise ValueError('Default value should be [A, U, S]')
+        if len(default_values) != 3: raise ValueError('Default value should be [A, U, S]')
         match axis:
             case 'x':
                 A, U, S = np.array([
