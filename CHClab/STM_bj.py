@@ -2,28 +2,40 @@ from .common import *
 
 
 def extract_data(raw_data: Union[np.ndarray, str, list],
-                 length: int = 1000,
+                 length: int = 1600,
                  upper: float = 3.2,
                  lower: float = 1e-6,
-                 method: Literal['pull', 'crash', 'both'] = 'pull',
+                 direction: Literal['pull', 'crash', 'both'] = 'pull',
                  check_size: tuple[int, int] = [10, 10],
                  cut_point: float = None,
                  **kwargs) -> np.ndarray:
-    '''
-    Extract useful data from raw_data
+    """
+    Extract traces from raw data
 
-    Args:
-        raw_data (ndarray | str): 1D array (G) contains raw data, directory of files, zip file, or txt file
-        length (int): length of extracted data per trace
-        upper (float): extract data greater than upper limit
-        lower (float): extract data less than lower limit
-        method (str): 'pull', 'crash' or 'both'
-        check_size (list, optional): length of data in the front or end of the trace used to determine the upper/lower limit
-        cut_point (float, optional): used to find traces at G=cut_point. Default to (upper * lower)**0.5
+    Parameters
+    ----------
+    raw_data : Union[np.ndarray, str, list]
+        1D array (G) contains raw data, directory of files, zip file, or txt file
+    length : int, optional
+        length of extracted data per trace, by default 1600
+    upper : float, optional
+        extract traces with data greater than upper limit, by default 3.2
+    lower : float, optional
+        extract traces with data less than lower limit, by default 1e-6
+    direction : Literal[&#39;pull&#39;, &#39;crash&#39;, &#39;both&#39;], optional
+        extract pull, crash or both direction, by default 'pull'
+    check_size : tuple[int, int], optional
+        length of data in the front or end of the trace used to determine the upper/lower limit, by default [10, 10]
+    cut_point : float, optional
+        used to find traces at G=cut_point, by default (upper * lower)**0.5
+    kwargs
+        load_data kwargs
 
-    Returns:
-        extracted_data (ndarray): 2D G array with shape (trace, length)
-    '''
+    Returns
+    -------
+    G : np.ndarray
+        2D G array with shape (trace, length)
+    """
     if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.size:
         if cut_point == None: cut_point = (upper * lower)**0.5
@@ -31,7 +43,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list],
         if len(index):
             split_trace = np.stack(
                 [raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
-            match method:
+            match direction:
                 case 'pull':
                     return split_trace[(split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)]
                 case 'crash':
@@ -44,15 +56,21 @@ def extract_data(raw_data: Union[np.ndarray, str, list],
 
 def get_displacement(G: np.ndarray, zero_point: float = 0.5, x_conversion: float = 800, **kwargs) -> np.ndarray:
     """
-    Get displacement from conductance array
+    Get displacement from conductance
 
-    Args:
-        G (ndarray): 2D G array with shape (trace, length)
-        zero_point (float): set x=0 at G=zero_point
-        x_conversion (float, optional): points per displacement
+    Parameters
+    ----------
+    G : np.ndarray
+        2D G array with shape (trace, length)
+    zero_point : float, optional
+        set x=0 at G=zero_point, by default 0.5
+    x_conversion : float, optional
+        points per nm, calculated by sampling rate/ramp rate, by default 800
 
-    Returns:
-        X (ndarray): 2D X array with shape (trace, length)
+    Returns
+    -------
+    X : np.ndarray
+        2D X array with shape (trace, length)
     """
     if G.ndim == 1: G = np.expand_dims(G, 0)
     is_pull = G[:, 0] > G[:, -1]
@@ -71,90 +89,122 @@ class Hist_G(Hist1D):
     """
     1D conductance histogram
 
-    Args:
-        Glim (tuple): max and min value of G
-        num_bins (float): number of bins
-        x_scale (str): linear or log scale of x axis
-        kwargs (dict, optional): Hist1D kwargs
-
-    Attributes:
-        trace (int): number of traces
-        bins (ndarray): 1D array of bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (StepPatch): plt.stairs object
+    Parameters
+    ----------
+    Glim : tuple[float, float], optional
+        max and min value of G, by default (1e-5, 10**0.5)
+    num_bins : float, optional
+        number of bins, by default 550
+    x_scale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'log'
+    xlabel : str, optional
+        set xlabel, by default 'Conductance ($G/G_0$)'
+    ylabel : str, optional
+        set ylabel, by default 'Count/trace'
+        
+    kwargs
+        Hist1D kwargs
     """
 
-    def __init__(self, Glim: tuple[float, float] = (1e-5, 10**0.5), num_bins: float = 550, x_scale: Literal['linear', 'log'] = 'log', **kwargs) -> None:
-        super().__init__(Glim, num_bins, x_scale, **kwargs)
-        self.ax.set_xlabel('Conductance ($G/G_0$)')
-        self.ax.set_ylabel('Count/trace')
+    def __init__(self,
+                 Glim: tuple[float, float] = (1e-5, 10**0.5),
+                 num_bins: float = 550,
+                 x_scale: Literal['linear', 'log'] = 'log',
+                 *,
+                 xlabel: str = 'Conductance ($G/G_0$)',
+                 ylabel: str = 'Count/trace',
+                 **kwargs) -> None:
+        super().__init__(Glim, num_bins, x_scale, xlabel=xlabel, ylabel=ylabel, **kwargs)
 
-    def add_data(self, G: np.ndarray, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, set_ylim: bool = True, trace: int = None, **kwargs) -> None:
         """
-        Add data into 1D histogram (G)
+        Add data into 1D conductance histogram
 
-        Args:
-            G (ndarray): 2D array with shape (trace, length)
+        Parameters
+        ----------
+        G : np.ndarray
+            2D array with shape (trace, length), or 1D array
+        set_ylim : bool, optional
+            set largest y as y max, by default True
+        trace : int, optional
+            set custom #trace, by default None
+        kwargs
+            Hist1D.add_data kwargs
         """
-        super().add_data(G, **kwargs)
+        super().add_data(G, set_ylim, trace, **kwargs)
 
 
 class Hist_GS(Hist2D):
     """
     2D conductance-displacement histogram
 
-    Args:
-        Xlim (tuple): max and min value of X
-        Glim (tuple): max and min value of G
-        num_X_bins (float): number of X bins
-        num_G_bins (float): number of G bins
-        xscale (str): linear or log scale of x axis
-        yscale (str): linear or log scale of y axis
-        zero_point (float): set x=0 at G=zero_point
-        x_conversion (float, optional): points per nm
-        kwargs (dict, optional): Hist2D kwargs
-
-    Attributes:
-        trace (int): number of traces
-        x_bins (ndarray): 1D array of x bin edges
-        y_bins (ndarray): 1D array of y bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (QuadMesh): plt.pcolormesh object
+    Parameters
+    ----------
+    Xlim : tuple[float, float], optional
+        max and min value of X, by default (-0.5, 0.5)
+    Glim : tuple[float, float], optional
+        max and min value of G, by default (1e-5, 10**0.5)
+    num_X_bins : float, optional
+        number of X bins, by default 500
+    num_G_bins : float, optional
+        number of G bins, by default 550
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'linear'
+    yscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of y axis, by default 'log'
+    zero_point : float, optional
+        set x=0 at G=zero_point, by default 0.5
+    x_conversion : float, optional
+        _description_, by default 800
+    xlabel : str, optional
+        set xlabel, by default 'Displacement (nm)'
+    ylabel : str, optional
+        set ylabel, by default 'Conductance ($G/G_0$)'
+    colorbar_label : str, optional
+        set colorbar label, by default 'Count/trace'
+    kwargs
+        Hist2D kwargs
     """
 
     def __init__(self,
-                 Xlim: tuple[float, float] = (-0.3, 0.5),
+                 Xlim: tuple[float, float] = (-0.5, 0.5),
                  Glim: tuple[float, float] = (1e-5, 10**0.5),
-                 num_X_bins: float = 800,
+                 num_X_bins: float = 500,
                  num_G_bins: float = 550,
                  xscale: Literal['linear', 'log'] = 'linear',
                  yscale: Literal['linear', 'log'] = 'log',
                  zero_point: float = 0.5,
                  x_conversion: float = 800,
+                 *,
+                 xlabel: str = 'Displacement (nm)',
+                 ylabel: str = 'Conductance ($G/G_0$)',
+                 colorbar_label: str = 'Count/trace',
                  **kwargs) -> None:
-        super().__init__(Xlim, Glim, num_X_bins, num_G_bins, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('Displacement (nm)')
-        self.ax.set_ylabel('Conductance ($G/G_0$)')
-        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
+        super().__init__(Xlim, Glim, num_X_bins, num_G_bins, xscale, yscale, xlabel=xlabel, ylabel=ylabel, colorbar_label=colorbar_label, **kwargs)
         self.zero_point = zero_point
         self.x_conversion = x_conversion
 
-    def add_data(self, G: np.ndarray, X: np.ndarray = None, zero_point: float = None, set_clim: bool = True, **kwargs) -> None:
+    def add_data(self, G: np.ndarray, X: np.ndarray = None, zero_point: float = None, set_clim: bool = True, **kwargs) -> np.ndarray:
         """
-        Add data into 2D histogram (GS)
+        Add data into 2D conductance-displacement histogram
 
-        Args:
-            G (ndarray): 2D G array with shape (trace, length)
-            X (ndarray, optional): 2D X array with shape (trace, length)
-            zero_point (float, optional): set x=0 at G=zero_point, overwrite attribute
-            set_clim (bool, optional): set largest z as z max
-            
-        Returns:
-            X (ndarray): 2D X array with shape (trace, length)
+        Parameters
+        ----------
+        G : np.ndarray
+            2D G array with shape (trace, length)
+        X : np.ndarray, optional
+            2D X array with shape (trace, length), by default None
+        zero_point : float, optional
+            set x=0 at G=zero_point, by default self.x_conversion
+        set_clim : bool, optional
+            set largest z as z max, by default True
+        kwargs
+            Hist2D.add_data kwargs
+
+        Returns
+        -------
+        X : np.ndarray
+            2D X array with shape (trace, length)
         """
         if X is None:
             X = get_displacement(G, zero_point=zero_point or self.zero_point, x_conversion=self.x_conversion)
@@ -164,25 +214,30 @@ class Hist_GS(Hist2D):
 
 class Hist_Gt(Hist2D):
     """
-    Conductance-time histogram
+    2D conductance-time histogram
 
-    Args:
-        tlim (tuple): max and min value of t
-        Glim (tuple): max and min value of G
-        size_t_bins (float): t bin size in seconds
-        num_G_bins (float): number of G bins
-        xscale (str): linear or log scale of x axis
-        yscale (str): linear or log scale of y axis
-        kwargs (dict, optional): Hist2D kwargs
-
-    Attributes:
-        trace (int): number of traces
-        x_bins (ndarray): 1D array of x bin edges
-        y_bins (ndarray): 1D array of y bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (QuadMesh): plt.pcolormesh object
+    Parameters
+    ----------
+    tlim : tuple[float, float], optional
+        max and min value of t, by default (0, 3600)
+    Glim : tuple[float, float], optional
+        max and min value of G, by default (1e-5, 10**0.5)
+    size_t_bins : float, optional
+        t bin size in seconds, by default 30
+    num_G_bins : float, optional
+        number of G bins, by default 550
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'linear'
+    yscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of y axis, by default 'log'
+    xlabel : str, optional
+        set xlabel, by default 'Time (min)'
+    ylabel : str, optional
+        set ylabel, by default 'Conductance ($G/G_0$)'
+    colorbar_label : str, optional
+        set colorbar label, by default 'Count/trace'
+    kwargs
+        Hist2D kwargs
     """
 
     def __init__(self,
@@ -192,11 +247,12 @@ class Hist_Gt(Hist2D):
                  num_G_bins: float = 550,
                  xscale: Literal['linear', 'log'] = 'linear',
                  yscale: Literal['linear', 'log'] = 'log',
+                 *,
+                 xlabel: str = 'Time (min)',
+                 ylabel: str = 'Conductance ($G/G_0$)',
+                 colorbar_label: str = 'Count/trace',
                  **kwargs) -> None:
-        super().__init__(tlim, Glim, int(np.abs(tlim[1] - tlim[0]) // size_t_bins), num_G_bins, xscale, yscale, **kwargs)
-        self.ax.set_xlabel('Time (min)')
-        self.ax.set_ylabel('Conductance ($G/G_0$)')
-        if hasattr(self, 'colorbar'): self.colorbar.set_label('Count/trace')
+        super().__init__(tlim, Glim, int(np.abs(tlim[1] - tlim[0]) // size_t_bins), num_G_bins, xscale, yscale, xlabel=xlabel, ylabel=ylabel, colorbar_label=colorbar_label, **kwargs)
         self.trace = np.zeros(self.x.size)
         self.ax.set_xticks(np.arange(0, self.x_max, 600), np.arange(0, self.x_max / 60, 10, dtype=int))
         self.ax.set_xticks(np.arange(0, self.x_max, 60), minor=True)
@@ -209,12 +265,18 @@ class Hist_Gt(Hist2D):
 
     def add_data(self, G: np.ndarray, t: np.ndarray = None, set_clim: bool = True, *, interval: float = 0.5, **kwargs) -> None:
         """
-        Add data into 2D histogram
+        Add data into 2D conductance-time histogram
 
-        Args:
-            G (ndarray): 2D G array with shape (trace, length)
-            t (ndarray): 1D time array with shape (trace)
-            interval (float, optional): time interval between each trace
+        Parameters
+        ----------
+        G : np.ndarray
+            2D G array with shape (trace, length)
+        t : np.ndarray, optional
+            1D time array with shape (trace), or use interval to generate t, by default None
+        set_clim : bool, optional
+            set largest z as z max, by default True
+        interval : float, optional
+            time interval between each trace, by default 0.5
         """
         if t is None: t = np.arange(G.shape[0]) * interval
         self.trace = self.trace + np.histogram(t, self.x_bins)[0]
@@ -229,33 +291,37 @@ class Hist_Correlation(Hist2D):
     """
     Cross-correlation conductance histogram
 
-    Args:
-        Glim (tuple): max and min value of G
-        num_bins (float): number of bins
-        x_scale (str): linear or log scale of x axis
-        cmap (optional): plt cmap
-        norm (optional): plt norm
-        kwargs (dict, optional): Hist2D kwargs
-
-    Attributes:
-        trace (int): number of traces
-        bins (ndarray): 1D array of bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (StepPatch): plt.stairs object
+    Parameters
+    ----------
+    Glim : tuple[float, float], optional
+        max and min value of G, by default (1e-5, 10**0.5)
+    num_bins : float, optional
+        number of G bins, by default 550
+    x_scale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'log'
+    xlabel : str, optional
+        set xlabel, by default 'Conductance ($G/G_0$)'
+    colorbar_label : str, optional
+        set colorbar label, by default None
+    cmap : str, optional
+        colormap, by default 'seismic'
+    norm : _type_, optional
+        colormap normalization, by default matplotlib.colors.SymLogNorm(0.1, 1, -1, 1)
+    kwargs
+        Hist2D kwargs
     """
 
     def __init__(self,
                  Glim: tuple[float, float] = (1e-5, 10**0.5),
                  num_bins: float = 550,
                  x_scale: Literal['linear', 'log'] = 'log',
+                 *,
+                 xlabel: str = 'Conductance ($G/G_0$)',
+                 colorbar_label: str = None,
                  cmap='seismic',
                  norm=matplotlib.colors.SymLogNorm(0.1, 1, -1, 1),
                  **kwargs) -> None:
-        super().__init__(Glim, Glim, num_bins, num_bins, x_scale, x_scale, **kwargs)
-        self.ax.set_xlabel('Conductance ($G/G_0$)')
-        self.ax.set_ylabel('Conductance ($G/G_0$)')
+        super().__init__(Glim, Glim, num_bins, num_bins, x_scale, x_scale, xlabel=xlabel, ylabel=xlabel, colorbar_label=colorbar_label, **kwargs)
         if isinstance(cmap, dict):
             cmap = matplotlib.colors.LinearSegmentedColormap('Cmap', segmentdata=cmap, N=256)
         self.plot.set_cmap(cmap=cmap)
@@ -263,10 +329,12 @@ class Hist_Correlation(Hist2D):
 
     def add_data(self, G: np.ndarray, **kwargs) -> None:
         """
-        Add data into 2D histogram
+        Add data into cross-correlation histogram
 
-        Args:
-            G (ndarray): 2D G array with shape (trace, length)
+        Parameters
+        ----------
+        G : np.ndarray
+            2D G array with shape (trace, length)
         """
         N = np.apply_along_axis(lambda g: np.histogram(g, self.x_bins)[0], 1, G)
         if hasattr(self, 'N'):

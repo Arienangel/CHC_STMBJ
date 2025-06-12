@@ -267,7 +267,7 @@ class STM_bj_GUI:
                     "length": self.extract_length.get(),
                     "upper": self.upper.get(),
                     "lower": self.lower.get(),
-                    "method": self.direction.get(),
+                    "direction": self.direction.get(),
                     "zero_point": self.zero_point.get(),
                     "x_conversion": self.points_per_nm.get(),
                     'G_scale': self.G_scale.get(),

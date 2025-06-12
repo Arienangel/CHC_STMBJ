@@ -7,7 +7,7 @@ from CHClab import STM_bj
 import numpy as np
 import matplotlib.pyplot as plt
 
-G = STM_bj.extract_data([r"./examples/test_data/STM_bj.txt"], length=2000, upper=3.2, lower=1e-5, method='pull')
+G = STM_bj.extract_data([r"./examples/test_data/STM_bj.txt"], length=2000, upper=3.2, lower=1e-5, direction='pull')
 X = STM_bj.get_displacement(G, zero_point=0.5, x_conversion=800)
 G.shape
 # %% plot 1D histogram and fit peaks

@@ -13,21 +13,31 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
                  I_raw: np.array = None,
                  V_raw: np.array = None,
                  **kwargs) -> np.ndarray:
-    '''
+    """
     Extract traces from raw_data
 
-    Args:
-        raw_data (ndarray | str): 1D G array or 2D array (I, V) contains raw data, directory of files, zip file, or txt file
-        I_raw (ndarray, optional): raw current in 1D array
-        V_raw (ndarray, optional): raw voltage in 1D array
-        length (int): length of extracted data per trace
-        start_from (int): length between zero_point and start of trace
-        zero_point (float): set x=0 at G=zero_point
+    Parameters
+    ----------
+    raw_data : Union[np.ndarray, str, list], optional
+        1D G array or 2D array (I, V) contains raw data, directory of files, zip file, or txt file, by default None
+    length : int, optional
+        length of extracted data per trace, by default 6000
+    start_from : int, optional
+        length between zero_point and start of trace, by default 4000
+    zero_point : float, optional
+        set x=0 at G=zero_point, by default 0.5
+    units : list, optional
+        unit of I and V, by default [1e-6, 1]
+    I_raw : np.array, optional
+        raw current in 1D array, by default None
+    V_raw : np.array, optional
+        raw voltage in 1D array, by default None
 
-    Returns:
-        I (ndarray): current (A) in 2D array (#traces, length)
-        V (ndarray): voltage (V) in 2D array (#traces, length)
-    '''
+    Returns
+    -------
+    G np.ndarray
+        2D G array with shape (trace, length)
+    """                 
     if raw_data is None: raw_data = conductance(I_raw * units[0], V_raw * units[1])
     elif not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.shape[0] == 2: raw_data = conductance(*(raw_data[::-1] * np.expand_dims(units, 1)))
@@ -40,14 +50,24 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
 
 def PSD(G: np.ndarray, sampling_rate: float = 40000, *, return_freq: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """
-    Args:
-        G (np.ndarray): 2D G array with shape (trace, length)
-        sampling_rate (float, optional)
+    Calculate power spectral density by Fourier transform
 
-    Returns:
-        PSD (np.ndarray): power spectral density
-        freq (np.ndarray): sample frequency of PSD
-    """
+    Parameters
+    ----------
+    G : np.ndarray
+        2D G array with shape (trace, length)
+    sampling_rate : float, optional
+        points per second, by default 40000
+    return_freq : bool, optional
+        calculate frequency, by default True
+
+    Returns
+    -------
+    PSD : np.array
+        2D power spectral density
+    freq : np.array, optional
+        1D frequency of PSD
+    """    
     dt = 1 / sampling_rate
     n = G.shape[1]
     t = n / sampling_rate
@@ -59,14 +79,23 @@ def PSD(G: np.ndarray, sampling_rate: float = 40000, *, return_freq: bool = True
 
 def noise_power(PSD: np.ndarray, freq: np.ndarray, integrand: list = [100, 1000], *, int_method: Literal['trapezoid', 'simpson'] = 'trapezoid') -> np.ndarray:
     """
-    Args:
-        PSD (np.ndarray): power spectral density
-        freq (np.ndarray): sample frequency of PSD
-        interval (list, optional): integrand of df. Defaults to 100~1000 Hz.
-        int_method (str, optional): use trapezoidal rule or Simpson's rule to compute integral
+    Calculate noise power by integration of PSD
 
-    Returns:
-        NP (np.ndarray): noise power
+    Parameters
+    ----------
+    PSD : np.ndarray
+        power spectral density
+    freq : np.ndarray
+        frequency of PSD
+    integrand : list, optional
+        integrand of ∫PSD df, by default [100, 1000]
+    int_method : Literal[&#39;trapezoid&#39;, &#39;simpson&#39;], optional
+        use trapezoidal rule or Simpson's rule to compute integral, by default 'trapezoid'
+
+    Returns
+    -------
+    NP : np.ndarray
+        1D noise power array
     """
     integrand = sorted(integrand)
     idx = (freq >= integrand[0]) & (freq <= integrand[1])
@@ -82,17 +111,19 @@ class Flicker_noise_data:
     """
     Flicker noise object
 
-    Args:
-        sampling_rate (tuple): points per second
-        xscale (str): linear or log scale of x axis
-        yscale (str): linear or log scale of y axis
-        int_method (str, optional): use trapezoidal rule or Simpson's rule to compute integral
-
-    Attributes:
-        trace (int): number of traces
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-    """
+    Parameters
+    ----------
+    sampling_rate : float, optional
+        points per second, by default 40000
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'log'
+    yscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of y axis, by default 'log'
+    subplots_kw : tuple, optional
+        plt.subplots kwargs, by default None
+    int_method : Literal[&#39;trapezoid&#39;, &#39;simpson&#39;], optional
+        _description_, by default 'trapezoid'
+    """                 
 
     def __init__(self,
                  sampling_rate: float = 40000,
@@ -101,14 +132,14 @@ class Flicker_noise_data:
                  *,
                  fig: plt.Figure = None,
                  ax: matplotlib.axes.Axes = None,
-                 figsize: tuple = None,
+                 subplots_kw: tuple = None,
                  int_method: Literal['trapezoid', 'simpson'] = 'trapezoid'):
         self.sampling_rate = sampling_rate
         self.xscale = xscale
         self.yscale = yscale
         self.int_method = int_method
         if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.ax.set_xlabel('Conductance ($G/G_0$)')
         self.ax.set_ylabel('Noise power')
         self.ax.set_xscale(xscale)
@@ -121,48 +152,76 @@ class Flicker_noise_data:
 
     def set_data(self, G: np.ndarray, integrand=[100, 1000], n: float = 0, auto_fit=False):
         """
-        Set data into NP-G plot
+        Set 2D G array into NP-G plot
 
-        Args:
-            G (ndarray): 2D G array with shape (trace, length)
-            integrand (list): integrand of df. Defaults to 100~1000 Hz.
-            n (float, optional): noise power scaling exponent
+        Parameters
+        ----------
+        G : np.ndarray
+            2D G array with shape (trace, length)
+        integrand : list, optional
+            integrand of ∫PSD df, by default [100, 1000]
+        n : float, optional
+            noise power scaling exponent, by default 0
+        auto_fit : bool, optional
+            calculate n by fitting NP=c*G^n, by default False
 
-        Returns:
-            n (float): noise power scaling exponent
-        """
-
+        Returns
+        -------
+        n : float
+            noise power scaling exponent
+        """        
         self.PSD, self.freq = PSD(G, self.sampling_rate)
         self.NP = noise_power(self.PSD, self.freq, integrand, int_method=self.int_method)
         self.Gmean = G.mean(axis=1)
         return self.plot(self.Gmean, self.NP, n, auto_fit)
 
-    def fit(self, Gmean: np.ndarray, NP: np.ndarray) -> float:
+    def fit(self, Gmean: np.ndarray, NP: np.ndarray, *, return_c:bool=False) -> float:
         """
-        Args:
-            Gmean (np.ndarray): 1D G array
-            NP (np.ndarray): 1D NP array
+        Calculate n by fitting NP=c*G^n
 
-        Returns:
-            n (float): noise power scaling exponent
-        """
+        Parameters
+        ----------
+        Gmean : np.ndarray
+            1D Gmean array
+        NP : np.ndarray
+            1D NP array
+        return_c : bool, optional
+            return fitting constant, 
+
+        Returns
+        -------
+        n : float
+            noise power scaling exponent
+        c : float, optional
+            fitting constant, by default False
+        """        
         n, c = scipy.optimize.curve_fit(lambda x, n, c: n * x + c,
                                         Gmean if self.xscale == 'linear' else np.log10(np.abs(Gmean)),
                                         NP if self.yscale == 'linear' else np.log10(np.abs(NP)),
                                         bounds=[[0, -np.inf], [3, np.inf]])[0]
-        return n
+        if return_c: return n, c
+        else: return n
 
     def plot(self, Gmean: np.ndarray, NP: np.ndarray, n: float = 0, auto_fit=False) -> float:
         """
-        Args:
-            Gmean (np.ndarray): 1D G array
-            NP (np.ndarray): 1D NP array
-            n (float, optional): noise power scaling exponent
-            auto_fit (bool, optional): auto fit n
+        Set Gmean, NP array into NP-G plot
 
-        Returns:
-            n (float): noise power scaling exponent
-        """
+        Parameters
+        ----------
+        Gmean : np.ndarray
+            1D Gmean array
+        NP : np.ndarray
+            1D noise power array
+        n : float, optional
+            noise power scaling exponent, by default 0
+        auto_fit : bool, optional
+            calculate n by fitting NP=c*G^n, by default False
+
+        Returns
+        -------
+        n : float
+            noise power scaling exponent
+        """        
         if self.ax.lines: self.ax.lines[0].remove()
         if auto_fit: n = self.fit(Gmean, NP)
         y = NP / Gmean**n if n else NP
@@ -184,18 +243,35 @@ class Flicker_noise_data:
         contour: bool = False,
     ):
         """
-        Args:
-            xlim (tuple): (x min, x max)
-            ylim (tuple): (y min, y max)
-            num_x_bins (int): number of x bins
-            num_y_bins (int): number of y bins
-            contour (bool, optional): gaussian2d fitted contour plot
+        _summary_
 
-        Returns:
-            fig (Figure): plt.Figure object
-            ax (Axes): plt.Axes object
-            hist (tuple): 2d histogram array, x bin edges, y bin edges
-            param (ndarray, optioanl): gaussian2d fitting parameters (A, ux, uy, sx, sy, theta)
+        Parameters
+        ----------
+        xlim : tuple[float, float]
+            max and min value of x
+        ylim : tuple[float, float]
+            max and min value of y
+        num_x_bins : int
+            number of x bins
+        num_y_bins : int
+            number of y bins
+        subplots_kw : tuple, optional
+            plt.subplots kwargs, by default None
+        set_colorbar : bool, optional
+            add colorbar, by default False
+        contour : bool, optional
+            add contour by fitting 2D Gaussian distribution surface, by default False
+
+        Returns
+        -------
+        fig : plt.Figure, optional
+            Figure object
+        ax : matplotlib.axes.Axes, optional
+            Axes object
+        h : np.ndarray
+            2d histogram height array, x bin edges, y bin edges
+        param : np.ndarray, optional
+            gaussian2d fitting parameters (A, ux, uy, sx, sy, theta)
         """
         (x_min, x_max), (y_min, y_max) = sorted(xlim), sorted(ylim)
         x_bins = np.linspace(x_min, x_max, num_x_bins + 1) if self.xscale == 'linear' else np.logspace(np.log10(x_min), np.log10(x_max), num_x_bins + 1) if self.xscale == 'log' else None

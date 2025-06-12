@@ -31,12 +31,17 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
     """
     Calculate conductance
 
-    Args:
-        I (ndarray): current (A)
-        V (ndarray): E bias (V)
+    Parameters
+    ----------
+    I : np.ndarray
+        current (A)
+    V : np.ndarray
+        voltage (V)
 
-    Returns:
-        G/G0 (ndarray): conductance
+    Returns
+    -------
+    np.ndarray
+        conductance (G/G0)
     """
     with np.errstate(divide='ignore'):
         return I / V / G0
@@ -45,16 +50,23 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
 def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: float | np.ndarray) -> np.ndarray:
     """
     Gaussian distribution curve
-    If a, u, s is array, return multiple gaussion functions
+    If a, u, s is array, return multiple gaussion curves
 
-    Args:
-        x (ndarray): input value
-        a (float | np.ndarray): peak height
-        u (float | np.ndarray): average
-        s (float | np.ndarray): standard derivative
+    Parameters
+    ----------
+    x : np.ndarray
+        input values
+    a : float | np.ndarray
+        peak height
+    u : float | np.ndarray
+        average
+    s : float | np.ndarray
+        standard derivative
 
-    Returns:
-        y (ndarray): output value
+    Returns
+    -------
+    np.ndarray
+        output values
     """
     if isinstance(a, np.ndarray):
         return np.expand_dims(a, axis=1) * np.exp(-((x - np.expand_dims(u, axis=1)) / np.expand_dims(s, axis=1))**2 / 2)
@@ -62,53 +74,92 @@ def gaussian(x: np.ndarray, a: float | np.ndarray, u: float | np.ndarray, s: flo
         return a * np.exp(-((x - u) / s)**2 / 2)
 
 
-def multi_gaussian(x: np.ndarray, *args: float):
+def multi_gaussian(x: np.ndarray, *args: float) -> np.ndarray:
     """
-    Sum of multiple gaussian distribution curve
+    Sum of multiple gaussian distribution curves
 
-    Args:
-        x (ndarray): input value
-        args (float): a1, a2, a3..., u1, u2, u3..., s1, s2, s3...
+    Parameters
+    ----------
+    x : np.ndarray
+        input values
+    args : float
+        a1, a2, a3..., u1, u2, u3..., s1, s2, s3...
 
-    Returns:
-        y (ndarray): output value
+    Returns
+    -------
+    np.ndarray
+        output values
     """
     return np.sum([gaussian(x, *i) for i in np.array(args).reshape(3, len(args) // 3).T], axis=0)
 
 
-def gaussian2d(xy: list[np.ndarray], a: float, ux: float, uy: float, sx: float, sy: float, theta: float=0) -> np.ndarray:
+def gaussian2d(xy: Iterable[np.ndarray], a: float, ux: float, uy: float, sx: float, sy: float, theta: float = 0) -> np.ndarray:
     """
     2D Gaussian distribution surface
 
-    Args:
-        xy (list): list of x and y array
-        a (float): peak height
-        ux (float): average of x
-        uy (float): average of y
-        sx (float): standard derivative of x
-        sy (float): standard derivative of y
-        theta (float, optional): rotation angle
+    Parameters
+    ----------
+    xy : Iterable[np.ndarray]
+        x and y array
+    a : float
+        peak height
+    ux : float
+        average of x
+    uy : float
+        average of y
+    sx : float
+        standard derivative of x
+    sy : float
+        standard derivative of y
+    theta : float, optional
+        rotation angle, by default 0
 
-    Returns:
-        z (ndarray): output value
+    Returns
+    -------
+    np.ndarray
+        output values
     """
     x, y = xy
-    i=(np.cos(theta)/sx)**2/2+(np.sin(theta)/sy)**2/2
-    j=np.sin(2*theta)/(2*sx**2)-np.sin(2*theta)/(2*sy**2)
-    k=(np.sin(theta)/sx)**2/2+(np.cos(theta)/sy)**2/2
-    return a * np.exp(-i*(x-ux)**2-j*(x-ux)*(y-uy)-k*(y-uy)**2)
+    i = (np.cos(theta) / sx)**2 / 2 + (np.sin(theta) / sy)**2 / 2
+    j = np.sin(2 * theta) / (2 * sx**2) - np.sin(2 * theta) / (2 * sy**2)
+    k = (np.sin(theta) / sx)**2 / 2 + (np.cos(theta) / sy)**2 / 2
+    return a * np.exp(-i * (x - ux)**2 - j * (x - ux) * (y - uy) - k * (y - uy)**2)
+
+
+def multi_gaussian2d(xy: Iterable[np.ndarray], *args: float) -> np.ndarray:
+    """
+    Sum of multiple 2D gaussian distribution surfaces
+
+    Parameters
+    ----------
+    xy : Iterable[np.ndarray]
+        x and y array
+    args : float
+        a1, a2..., ux1, ux2..., uy1, uy2..., sx1, sx2..., sy1, sy2..., theta1, theta2...
+
+    Returns
+    -------
+    np.ndarray
+        output values
+    """
+    return np.sum([gaussian2d(xy, *i) for i in np.array(args).reshape(6, len(args) // 6).T], axis=0)
 
 
 def get_correlation_matrix(A: np.ndarray, bins: np.ndarray) -> np.ndarray:
     """
     Get correlation coefficient matrix
 
-    Args:
-        A (np.ndarray): 2D array with shape (trace, length)
-        bins (np.ndarray): bins used in np.histogram
+    Parameters
+    ----------
+    A : np.ndarray
+        2D array with shape (trace, length)
+    bins : np.ndarray
+        bins used in np.histogram
 
-    Returns:
-        ndarray: correlation coefficient matrix
+    Returns
+    -------
+    np.ndarray
+        correlation coefficient matrix
     """
     hist = np.apply_along_axis(lambda i: np.histogram(i, bins)[0], 1, A)
     return np.corrcoef(hist, rowvar=False)
@@ -116,18 +167,27 @@ def get_correlation_matrix(A: np.ndarray, bins: np.ndarray) -> np.ndarray:
 
 def load_data(path: Union[str, Iterable], recursive: bool = False, max_workers: int = None, delimiter: str = '\t', transpose: bool = True, squeeze: bool = True, **kwargs) -> np.ndarray:
     """
-    Load data from text files.
+    Load data from text files
 
-    Args:
-        path (str): directory of files, zip file, or txt file
-        recursive (bool, optional): read txt files in folder recursively
-        max_workers (int, optional): maximum number of processes that can be used
-        delimiter (str, optional):  character used to separate the values
-        transpose (bool, optional): transpose row and column
-        squeeze (bool, optional): remove dimensions of length 1
+    Parameters
+    ----------
+    path : Union[str, Iterable]
+        directory of files, zip file, or txt file
+    recursive : bool, optional
+        read txt files in folder recursively, by default False
+    max_workers : int, optional
+        maximum number of processes that can be used, by default None
+    delimiter : str, optional
+        character used to separate the values, by default '\t'
+    transpose : bool, optional
+        transpose row and column, by default True
+    squeeze : bool, optional
+        remove dimensions of length 1, by default True
 
-    Returns:
-        out (ndarray): Data read from the text files.
+    Returns
+    -------
+    np.ndarray
+        data read from the text files
     """
 
     def _load(path) -> list:
@@ -186,18 +246,27 @@ def load_data(path: Union[str, Iterable], recursive: bool = False, max_workers: 
 
 def load_data_with_metadata(path: Union[str, Iterable], recursive: bool = False, max_workers=None, delimiter: str = '\t', transpose: bool = True, squeeze: bool = True, **kwargs) -> pd.DataFrame:
     """
-    Load data and metadata from text files.
+    Load data and metadata from text files
 
-    Args:
-        path (str): directory of files, zip file, or txt file
-        recursive (bool, optional): read txt files in folder recursively
-        max_workers (int, optional): maximum number of workers can be used
-        delimiter (str, optional):  character used to separate the values
-        transpose (bool, optional): transpose row and column
-        squeeze (bool, optional): remove dimensions of length 1 
+    Parameters
+    ----------
+    path : Union[str, Iterable]
+        directory of files, zip file, or txt file
+    recursive : bool, optional
+        read txt files in folder recursively, by default False
+    max_workers : _type_, optional
+        maximum number of workers can be used, by default None
+    delimiter : str, optional
+        character used to separate the values, by default '\t'
+    transpose : bool, optional
+        transpose row and column, by default True
+    squeeze : bool, optional
+        remove dimensions of length 1, by default True
 
-    Returns:
-        out (DataFrame): File path, data read from the text files and unix time.
+    Returns
+    -------
+    pd.DataFrame
+        column of file path, data read from the text files, unix time
     """
 
     def _load(path) -> list:
@@ -267,19 +336,20 @@ class Hist1D:
     """
     1D histogram
 
-    Args:
-        xlim (tuple): max and min value of x
-        num_bin (float): number of bins
-        x_scale (str): linear or log scale of x axis
-        subplots_kw (dict, optional): plt.subplots kwargs
-
-    Attributes:
-        trace (int): number of traces
-        bins (ndarray): 1D array of bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (StepPatch): plt.stairs object
+    Parameters
+    ----------
+    xlim : tuple[float, float]
+        max and min value of x
+    num_x_bins : int
+        number of bins
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'linear'
+    subplots_kw : tuple, optional
+        plt.subplots kwargs, by default None
+    set_grid : bool, optional
+        add grid lines, by default True
+    kwargs
+        Axes.set kwargs
     """
 
     def __init__(self,
@@ -301,24 +371,26 @@ class Hist1D:
         if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
-        self.ax.set_xlim(self.x_min, self.x_max)
-        self.ax.set_xscale(xscale)
+        self.ax.set(xlim=(self.x_min, self.x_max), xscale=self.xscale, **kwargs)
         if set_grid: self.ax.grid(visible=True, which='major')
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
 
     @property
     def height_per_trace(self):
-        """ndarray: histogram height divided by number of traces"""
         return self.height / self.trace
 
     def add_data(self, x: np.ndarray, set_ylim: bool = True, trace: int = None, **kwargs) -> None:
         """
         Add data into histogram
 
-        Args:
-            x (ndarray): 2D array with shape (trace, length)
-            set_ylim (bool, optional): set largest y as y max
-            trace (int, optional): set custom #trace
+        Parameters
+        ----------
+        x : np.ndarray
+            2D array with shape (trace, length), or 1D array
+        set_ylim : bool, optional
+            set largest y as y max, by default True
+        trace : int, optional
+            set custom #trace, by default None
         """
         if trace is None: trace = x.shape[0] if x.ndim == 2 else 1
         self.trace = self.trace + trace
@@ -335,14 +407,23 @@ class Hist1D:
 
     def fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None) -> tuple[np.ndarray, np.ndarray]:
         """
-        Args:
-            x_range (list, optional): x range used to fit with height_per_trace, always in linear scale
-            p0 (list, optional): Initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log'
-            bounds (list, optional): Lower and upper bounds on parameters
+        Fit histogram with multiple gaussian curves
 
-        Returns:
-            ndarray: fitting results
-            ndarray: fitting parameters (A, U, S)
+        Parameters
+        ----------
+        x_range : list[float, float], optional
+            x range used to fit with height_per_trace, always in linear scale, by default [-np.inf, np.inf]
+        p0 : list, optional
+            initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log', by default None
+        bounds : list, optional
+            Lower and upper bounds of parameters, by default None
+
+        Returns
+        -------
+        np.ndarray
+            fitting results
+        np.ndarray
+            fitting parameters (A, U, S)
         """
         f = np.where((self.x > min(x_range)) & (self.x < max(x_range)))
         x = self.x if self.xscale == 'linear' else np.log10(self.x)
@@ -351,15 +432,25 @@ class Hist1D:
 
     def plot_fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, **kwargs) -> tuple[np.ndarray, np.ndarray, list[matplotlib.lines.Line2D]]:
         """
-        Args:
-            x_range (list, optional): x range used to fit with height_per_trace, always in linear scale
-            p0 (list, optional): Initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log'
-            bounds (list, optional): Lower and upper bounds on parameters
+        Fit histogram with multiple gaussian curves and plot curves
 
-        Returns:
-            ndarray: fitting results
-            ndarray: fitting parameters (A, U, S)
-            list: matplotlib Line2D objects
+        Parameters
+        ----------
+        x_range : list[float, float], optional
+            x range used to fit with height_per_trace, always in linear scale, by default [-np.inf, np.inf]
+        p0 : list, optional
+            initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log', by default None
+        bounds : list, optional
+            Lower and upper bounds of parameters, by default None
+
+        Returns
+        -------
+        np.ndarray
+            fitting results
+        np.ndarray
+            fitting parameters (A, U, S)
+        list[matplotlib.lines.Line2D]
+            matplotlib Line2D objects
         """
         fit, params = self.fitting(x_range, p0, bounds)
         return fit, params, self.ax.plot(self.x, fit, *args, **kwargs)
@@ -369,23 +460,28 @@ class Hist2D:
     """
     2D histogram
 
-    Args:
-        xlim (tuple): max and min value of x
-        ylim (tuple): max and min value of y
-        num_x_bin (float): number of x bins
-        num_y_bin (float): number of y bins
-        xscale (str): linear or log scale of x axis
-        yscale (str): linear or log scale of y axis
-        subplots_kw (dict, optional): plt.subplots kwargs
-
-    Attributes:
-        trace (int): number of traces
-        x_bins (ndarray): 1D array of x bin edges
-        y_bins (ndarray): 1D array of y bin edges
-        height (ndarray): height of the histogram
-        fig (Figure): plt.Figure object
-        ax (Axes): plt.Axes object
-        plot (QuadMesh): plt.pcolormesh object
+    Parameters
+    ----------
+    xlim : tuple[float, float]
+        max and min value of x
+    ylim : tuple[float, float]
+        max and min value of y
+    num_x_bins : int
+        number of x bins
+    num_y_bins : int
+        number of y bins
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'linear'
+    yscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of y axis, by default 'linear'
+    subplots_kw : tuple, optional
+        plt.subplots kwargs, by default None
+    set_colorbar : bool, optional
+        add colorbar, by default True
+    colorbar_label : str, optional
+        add colorbar label, by default None
+    kwargs
+        Axes.set kwargs
     """
 
     def __init__(self,
@@ -400,6 +496,7 @@ class Hist2D:
                  ax: matplotlib.axes.Axes = None,
                  subplots_kw: tuple = None,
                  set_colorbar: bool = True,
+                 colorbar_label: str = None,
                  **kwargs) -> None:
         (self.x_min, self.x_max), (self.y_min, self.y_max) = sorted(xlim), sorted(ylim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bins + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bins +
@@ -413,27 +510,30 @@ class Hist2D:
         if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
-        self.ax.set_xlim(self.x_min, self.x_max)
-        self.ax.set_ylim(self.y_min, self.y_max)
-        self.ax.set_xscale(xscale)
-        self.ax.set_yscale(yscale)
-        if set_colorbar: self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
+        self.ax.set(xlim=(self.x_min, self.x_max), ylim=(self.y_min, self.y_max), xscale=self.xscale, yscale=self.yscale, **kwargs)
+        if set_colorbar:
+            self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
+            if colorbar_label:
+                self.colorbar.set_label(colorbar_label)
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
         self.y = np.sqrt(self.y_bins[1:] * self.y_bins[:-1]) if yscale == 'log' else (self.y_bins[1:] + self.y_bins[:-1]) / 2
 
     @property
     def height_per_trace(self):
-        """ndarray: histogram height divided by trace"""
         return self.height / self.trace
 
     def add_data(self, x: np.ndarray, y: np.ndarray, set_clim: bool = True, **kwargs) -> None:
         """
         Add data into histogram
 
-        Args:
-            x (ndarray): 2D x array with shape (trace, length)
-            y (ndarray): 2D y array with shape (trace, length)
-            set_clim (bool, optional): set largest z as z max
+        Parameters
+        ----------
+        x : np.ndarray
+            2D x array with shape (trace, length)
+        y : np.ndarray
+            2D y array with shape (trace, length)
+        set_clim : bool, optional
+            set largest z as z max, by default True
         """
         self.trace = self.trace + x.shape[0]
         self.height = self.height + np.histogram2d(x.ravel(), y.ravel(), (self.x_bins, self.y_bins))[0]
@@ -449,8 +549,13 @@ class Hist2D:
 
     def set_cmap(self, cmap: matplotlib.colors.LinearSegmentedColormap | dict):
         """
-        Args:
-            cmap (LinearSegmentedColormap | dict): 
+        Set colormap from linear mapping segments
+
+        Parameters
+        ----------
+        cmap : matplotlib.colors.LinearSegmentedColormap | dict
+            example:
+
                 {
                     'red':   [[0, 1, 1], [0.05, 0, 0], [0.1, 0, 0], [0.15, 1, 1], [0.3, 1, 1], [1, 1, 1]],
                     'green': [[0, 1, 1], [0.05, 0, 0], [0.1, 1, 1], [0.15, 1, 1], [0.3, 0, 0], [1, 0, 0]],
@@ -463,15 +568,25 @@ class Hist2D:
 
     def fitting(self, axis: Literal['x', 'y'] = 'x', p0: list = None, bounds: list = None, sigma: float | list = 0, default_values: list[float] = [np.nan, np.nan, np.nan]) -> np.ndarray:
         """
-        Args:
-            axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
-            p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
-            bounds (list, optional): Lower and upper bounds on parameters
-            sigma (float|list, optional): standard derivative
-            default_values (list, optional): values used when least-square minimization failed
+        Fit histogram with multiple gaussian curves on axis
 
-        Returns:
-            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
+        Parameters
+        ----------
+        axis : Literal[&#39;x&#39;, &#39;y&#39;], optional
+            select the slice of axis, use y and height_per_trace to fit if axis=='x', by default 'x'
+        p0 : list, optional
+            initial guess for the parameters in gaussian function, use log scale if xscale=='log', by default None
+        bounds : list, optional
+            lower and upper bounds of parameters, by default None
+        sigma : float | list, optional
+            calculate multiple lines with μ+n*σ, by default 0
+        default_values : list[float], optional
+            values used when least-square minimization failed, by default [np.nan, np.nan, np.nan]
+
+        Returns
+        -------
+        np.ndarray
+            fitting results, return 1D array if sigma is float, return 2D array if sigma if list
         """
 
         def gaussian_fit(label, xdata, ydata, p0, bounds):
@@ -505,16 +620,27 @@ class Hist2D:
                      *args,
                      **kwargs) -> tuple[np.ndarray, list[matplotlib.lines.Line2D]]:
         """
-        Args:
-            axis (str): Select the slice of axis, use y and height_per_trace to fit if axis=='x'
-            p0 (list, optional): Initial guess for the parameters in gaussian function, use log scale if xscale=='log'
-            bounds (list, optional): Lower and upper bounds on parameters
-            sigma (float|list, optional): standard derivative
-            default_values (list, optional): values used when least-square minimization failed
+        Fit histogram with multiple gaussian curves on axis and plot curves
 
-        Returns:
-            ndarray: fitting results with shape (sigma.size or None, x.size or y.size)
-            list: matplotlib Line2D objects
+        Parameters
+        ----------
+        axis : Literal[&#39;x&#39;, &#39;y&#39;], optional
+            select the slice of axis, use y and height_per_trace to fit if axis=='x', by default 'x'
+        p0 : list, optional
+            initial guess for the parameters in gaussian function, use log scale if xscale=='log', by default None
+        bounds : list, optional
+            lower and upper bounds on parameters, by default None
+        sigma : float, optional
+            calculate multiple lines with μ+n*σ, by default 0, by default 0
+        default_values : list[float], optional
+            values used when least-square minimization failed, by default [np.nan, np.nan, np.nan]
+
+        Returns
+        -------
+        np.ndarray
+            fitting results, return 1D array if sigma is float, return 2D array if sigma if list
+        list[matplotlib.lines.Line2D]
+            matplotlib Line2D objects
         """
         fit = self.fitting(axis, p0, bounds, sigma, default_values)
         match axis:

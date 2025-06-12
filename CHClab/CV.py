@@ -6,9 +6,12 @@ class Segment:
     """
     IV segment
 
-    Args:
-        V (ndarray): voltage
-        I (ndarray): current
+    Parameters
+    ----------
+    V : np.ndarray
+        voltage
+    I : np.ndarray
+        current
     """
 
     def __init__(self, V: np.ndarray, I: np.ndarray):
@@ -29,11 +32,19 @@ class Segment:
         """
         Plot segment
 
-        Args:
-            plot (PlotCV, optional)
+        Parameters
+        ----------
+        plot : PlotCV, optional
+            _description_, by default None
+        args
+            PlotCV.add_segments args
+        kwargs
+            PlotCV.add_segments kwargs
 
-        Returns:
-            PlotCV
+        Returns
+        -------
+        PlotCV
+            PlotCV object
         """
         plot = plot or PlotCV()
         plot.add_segments(self, *args, **kwargs)
@@ -41,9 +52,17 @@ class Segment:
 
 
 class Segments(list[Segment]):
+    """
+    IV segments
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    Parameters
+    ----------
+    args: Segment
+        multiple segments
+    """
+
+    def __init__(self, *args: Segment):
+        super().__init__(*args)
 
     def __getitem__(self, index: int | slice | Iterable):
         if isinstance(index, Iterable):
@@ -52,26 +71,37 @@ class Segments(list[Segment]):
             L = super().__getitem__(index)
             return L if isinstance(L, Segment) else Segments(L)
 
-    def concat(self):
+    def concat(self) -> Segment:
         """
         Concat all segments into one segment
 
-        Returns:
-            Segment
+        Returns
+        -------
+        Segment
+            merged segment
         """
+
         return Segment(np.concatenate([s.V for s in self]), np.concatenate([s.I for s in self]))
 
     def plot(self, split_segment: bool = False, *args, label: list = None, plot=None, **kwargs):
         """
         Plot segments
 
-        Args:
-            split_segment (bool, optional): split segments into multiple lines
-            label (list, optional): label of each segment 
-            plot (PlotCV, optional)
+        Parameters
+        ----------
+        split_segment : bool, optional
+            split segments into multiple lines, by default False
+        label : list, optional
+            label of each segment, by default None
+        plot : PlotCV, optional
+            PlotCV object, by default None
+        kwargs
+            PlotCV.add_segments kwargs
 
-        Returns:
-            PlotCV
+        Returns
+        -------
+        PlotCV
+            PlotCV object
         """
         plot = plot or PlotCV()
         if split_segment:
@@ -82,6 +112,36 @@ class Segments(list[Segment]):
 
 
 class CVdata:
+    """
+    Cyclic voltammetry data
+
+    Parameters
+    ----------
+    V : np.ndarray
+        voltage
+    I : np.ndarray
+        current
+    Vinit : float, optional
+        start voltage, by default None
+    Vmax : float, optional
+        max voltage, by default None
+    Vmin : float, optional
+        min voltage, by default None
+    Vfinal : float, optional
+        end voltage, by default None
+    polarity : bool, optional
+        voltage scan from negative to positive if true, by default None
+    scan_rate : float, optional
+        voltage scan rate (V/s), by default None
+    num_segment : int, optional
+        number of segments, by default None
+    interval : float, optional
+        voltage change per point, by default None
+    quiet_time : float, optional
+        quiet time, by default None
+    sensitivity : float, optional
+        sensitivity, by default None
+    """
 
     def __init__(self,
                  V: np.ndarray,
@@ -96,23 +156,6 @@ class CVdata:
                  interval: float = None,
                  quiet_time: float = None,
                  sensitivity: float = None):
-        """
-        Cyclic voltammetry data
-
-        Args:
-            V (np.ndarray): voltage
-            I (np.ndarray): current
-            Vinit (float, optional): start voltage
-            Vmax (float, optional): max voltage
-            Vmin (float, optional): min voltage
-            Vfinal (float, optional): end voltage
-            polarity (bool, optional): voltage scan from negative to positive if true
-            scan_rate (float, optional): voltage scan rate (V/s)
-            num_segment (int, optional): number of segments
-            interval (float, optional): voltage change per point
-            quiet_time (float, optional): quiet time
-            sensitivity (float, optional): sensitivity
-        """
         self.V = V
         self.I = I
         self.fullcycle = Segment(V, I)
@@ -136,12 +179,17 @@ class CVdata:
         """
         Extract CV data from chi760 output file
 
-        Args:
-            file (str): chi760 txt path
-            string (str): chi760 txt content
+        Parameters
+        ----------
+        file : str, optional
+            chi760 txt path, by default None
+        string : str, optional
+            chi760 txt content, by default None
 
-        Returns:
-            CVdata
+        Returns
+        -------
+        CVdata
+            CVdata object
         """
         if file is not None:
             with open(file, mode='r', encoding='utf-8') as f:
@@ -187,14 +235,23 @@ class CVdata:
         """
         Plot cyclic voltammogram
 
-        Args:
-            segment_index (inint | slice | Iterable, optional): plot specific segments. plot all if none
-            split_segment (bool, optional): split segments into multiple lines
-            label (list, optional): label of each segment 
-            plot (PlotCV, optional)
+        Parameters
+        ----------
+        segment_index : int | slice | Iterable, optional
+            plot specific segments, plot all if none, by default None
+        split_segment : bool, optional
+            split segments into multiple lines, by default False
+        label : list, optional
+            label of each segment, by default None
+        plot : PlotCV, optional
+            PlotCV object, by default None
+        kwargs
+            PlotCV.add_segments kwargs
 
-        Returns:
-            PlotCV
+        Returns
+        -------
+        PlotCV
+            PlotCV object
         """
         plot = plot or PlotCV()
         if segment_index is None: plot.add_segments(self.fullcycle, *args, **kwargs)
@@ -207,12 +264,12 @@ class OCPdata:
     """
     Open circuit potential data
 
-    Args:
-        t (np.ndarray): time
-        V (np.ndarray): voltage
-
-    Attributes:
-        mean (float): mean voltage
+    Parameters
+    ----------
+    t : np.ndarray
+        time
+    V : np.ndarray
+        voltage
     """
 
     def __init__(self, t: np.ndarray, V: np.ndarray):
@@ -224,12 +281,17 @@ class OCPdata:
         """
         Extract OCP data from chi760 output file
 
-        Args:
-            file (str): chi760 txt path
-            string (str): chi760 txt content
+        Parameters
+        ----------
+        file : str, optional
+            chi760 txt path, by default None
+        string : str, optional
+            chi760 txt content, by default None
 
-        Returns:
-            OCPdata
+        Returns
+        -------
+        OCPdata
+            OCPdata object
         """
         if string is None:
             with open(file, mode='r', encoding='utf-8') as f:
@@ -246,11 +308,20 @@ class OCPdata:
 
 class PlotCV:
     """
-        Plot cyclic voltammogram
+    Plot cyclic voltammogram
 
-        Args:
-            subplots_kw (dict, optional): plt.subplots kwargs
-            prop_cycle (list, optional): plt prop cycle
+    Parameters
+    ----------
+    fig : plt.Figure, optional
+        Figure object, by default None
+    ax : matplotlib.axes.Axes, optional
+        Axes object, by default None
+    subplots_kw : tuple, optional
+        plt.subplots kwargs, by default None
+    prop_cycle : list, optional
+        Axes.set_prop_cycle, by default None
+    ax_set
+        Axes.set kwargs
     """
 
     def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, subplots_kw: tuple = None, prop_cycle: list = None, **ax_set):
@@ -265,9 +336,16 @@ class PlotCV:
         """
         Add data into cyclic voltammogram
 
-        Args:
-            V (ndarray): voltage
-            I (ndarray): current
+        Parameters
+        ----------
+        V : np.ndarray
+            voltage
+        I : np.ndarray
+            current
+        args
+            Axes.plot args
+        kwargs
+            Axes.plot kwargs
         """
         self.ax.plot(V, I, *args, **kwargs)
 
@@ -275,10 +353,18 @@ class PlotCV:
         """
         Add segments into cyclic voltammogram
 
-        Args:
-            segments (CVdata | Segments | Segment):
-            label (list, optional): label of each segment 
+        Parameters
+        ----------
+        segments : CVdata | Segments | Segment
+            plot given segments
+        label : list, optional
+            label of each segment, by default None
+        args
+            Axes.plot args
+        kwargs
+            Axes.plot kwargs
         """
+
         if isinstance(segments, Segment):
             self.add_data(segments.V, segments.I, label=label, *args, **kwargs)
         else:
