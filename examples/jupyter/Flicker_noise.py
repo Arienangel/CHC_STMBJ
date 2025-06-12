@@ -16,12 +16,14 @@ f = ((G < 1e-5).sum(axis=1) < 1000) & (np.log10(np.abs(G)).std(axis=1) < 1)
 PSD, freq = Flicker_noise.PSD(G[f], sampling_rate=sampling_rate)
 NP = Flicker_noise.noise_power(PSD, freq, integrand=[100, 1000])
 Gmean = G[f].mean(axis=1)
-# %% NP-G plot with specific n
-F0 = Flicker_noise.Flicker_noise_data(sampling_rate=sampling_rate, xscale='log', yscale='log')
-n = F0.set_data(G[f], integrand=[100, 1000], n=0)
-n
-# %% NP-G plotwith auto fit n
-FN = Flicker_noise.Flicker_noise_data(sampling_rate=sampling_rate, xscale='log', yscale='log')
-n = FN.set_data(G[f], integrand=[100, 1000], auto_fit=True)
-n
+# %% Flicker noise data
+F = Flicker_noise.Flicker_noise_data(sampling_rate=sampling_rate, xscale='log', yscale='log', int_method='trapezoid')
+F.add_data(G[f], integrand=[100, 1000])
+# %% NP-G plot with auto fit n
+F.get_scatter(auto_fit=True)
+F.scatter.n
+# %% NP-G histogram with contour
+F.get_hist(Glim=(1e-5, 1), NPlim=(1e-5, 1), num_G_bins=50, num_NP_bins=50, set_colorbar=False, n=1.2)
+z, params=F.hist.plot_contour(x_range=[1e-5, 1], y_range=[1e-5, 1], p0=[1, -3, -3, 1, 1, 0], bounds=[[0, -5, -5, 0, 0, -np.pi], [np.inf, 0, 0, 2, 2, np.pi]])
+params
 # %%
