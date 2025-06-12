@@ -37,7 +37,7 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
     -------
     G np.ndarray
         2D G array with shape (trace, length)
-    """                 
+    """
     if raw_data is None: raw_data = conductance(I_raw * units[0], V_raw * units[1])
     elif not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
     if raw_data.shape[0] == 2: raw_data = conductance(*(raw_data[::-1] * np.expand_dims(units, 1)))
@@ -67,7 +67,7 @@ def PSD(G: np.ndarray, sampling_rate: float = 40000, *, return_freq: bool = True
         2D power spectral density
     freq : np.array, optional
         1D frequency of PSD
-    """    
+    """
     dt = 1 / sampling_rate
     n = G.shape[1]
     t = n / sampling_rate
@@ -122,37 +122,127 @@ class Flicker_noise_data:
     subplots_kw : tuple, optional
         plt.subplots kwargs, by default None
     int_method : Literal[&#39;trapezoid&#39;, &#39;simpson&#39;], optional
-        _description_, by default 'trapezoid'
-    """                 
+        use trapezoidal rule or Simpson's rule to compute integral, by default 'trapezoid'
+    n : float, optional
+        noise power scaling exponent, default value for LineNP and HistNP object, by default 0
+    scatter : bool, optional
+        create NP-Gmean scatter plot, by default False
+    hist : bool, optional
+        create NP-Gmean histogram, by default False
+    """
 
     def __init__(self,
                  sampling_rate: float = 40000,
                  xscale: Literal['linear', 'log'] = 'log',
                  yscale: Literal['linear', 'log'] = 'log',
                  *,
-                 fig: plt.Figure = None,
-                 ax: matplotlib.axes.Axes = None,
-                 subplots_kw: tuple = None,
-                 int_method: Literal['trapezoid', 'simpson'] = 'trapezoid'):
+                 int_method: Literal['trapezoid', 'simpson'] = 'trapezoid',
+                 n: float = 0,
+                 scatter: bool = False,
+                 hist: bool = False):
         self.sampling_rate = sampling_rate
         self.xscale = xscale
         self.yscale = yscale
         self.int_method = int_method
-        if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
-        self.ax.set_xlabel('Conductance ($G/G_0$)')
-        self.ax.set_ylabel('Noise power')
-        self.ax.set_xscale(xscale)
-        self.ax.set_yscale(yscale)
+        self.Gmean = np.array([])
+        self.NP = np.array([])
+        self.n = n
+        self.scatter = self.get_scatter() if scatter else None
+        self.hist = self.get_hist() if hist else None
+
+    def get_scatter(self, xlabel: str = 'Conductance ($G/G_0$)', ylabel: str = 'Noise power', n: float = None, auto_fit: bool = False, **kwargs):
+        """
+        Create NP-Gmean scatter plot
+
+        Parameters
+        ----------
+        xlabel : str, optional
+            set xlabel, by default 'Conductance (/G_0$)'
+        ylabel : str, optional
+            set ylabel, by default 'Noise power'
+        n : float, optional
+            noise power scaling exponent, by default self.n
+        auto_fit : bool, optional
+            calculate n by fitting NP=c*G^n, by default False
+        kwargs
+            LineNP kwargs
+
+        Returns
+        -------
+        LineNP
+            LineNP object
+        """
+        if n is None: n=self.n
+        self.scatter = LineNP(xscale=self.xscale, yscale=self.yscale, xlabel=xlabel, ylabel=ylabel, n=n, **kwargs)
+        if self.Gmean.size:
+            self.scatter.add_data(self.Gmean, self.NP, auto_fit=auto_fit)
+        return self.scatter
+
+    def get_hist(self,
+                 Glim: tuple[float, float] = (1e-5, 1),
+                 NPlim: tuple[float, float] = (1e-7, 1e-2),
+                 num_G_bins: float = 100,
+                 num_NP_bins: float = 100,
+                 xlabel: str = 'Conductance ($G/G_0$)',
+                 ylabel: str = 'Noise power',
+                 set_colorbar: bool = False,
+                 n: float = None,
+                 auto_fit: bool = False,
+                 **kwargs):
+        """
+        Create NP-Gmean histogram
+
+        Parameters
+        ----------
+        Glim : tuple[float, float], optional
+            max and min value of G, by default (-0.5, 0.5)
+        NPlim : tuple[float, float], optional
+            max and min value of NP, by default (1e-5, 10**0.5)
+        num_G_bins : float, optional
+            number of G bins, by default 500
+        num_NP_bins : float, optional
+            number of NP bins, by default 550
+        xlabel : str, optional
+            set xlabel, by default 'Conductance (/G_0$)'
+        ylabel : str, optional
+            set ylabel, by default 'Noise power'
+        set_colorbar : bool, optional
+            add colorbar, by default False
+        n : float, optional
+            noise power scaling exponent, by default self.n
+        auto_fit : bool, optional
+            calculate n by minimized gaussian2d theta, by default False
+        kwargs
+            HistNP kwargs
+
+        Returns
+        -------
+        HistNP
+            HistNP object
+        """
+        if n is None: n=self.n
+        self.hist = HistNP(Glim, NPlim, num_G_bins, num_NP_bins, self.xscale, self.yscale, xlabel=xlabel, ylabel=ylabel, set_colorbar=set_colorbar, n=n, **kwargs)
+        if self.Gmean.size:
+            self.hist.add_data(self.Gmean, self.NP, auto_fit=auto_fit)
+        return self.hist
 
     @property
     def trace(self):
-        if self.ax.lines: return self.ax.lines[0].get_data()[0].shape[0]
-        else: return 0
+        return self.Gmean.size
 
-    def set_data(self, G: np.ndarray, integrand=[100, 1000], n: float = 0, auto_fit=False):
+    def add_data(self,
+                 G: np.ndarray = None,
+                 integrand=[100, 1000],
+                 n: float = None,
+                 auto_fit: bool = False,
+                 Gmean: np.ndarray = None,
+                 NP: np.ndarray = None,
+                 *args,
+                 int_method: Literal['trapezoid', 'simpson'] = None,
+                 update: bool = True,
+                 **kwargs):
         """
-        Set 2D G array into NP-G plot
+        Add NP and Gmean data or calculate NP and Gmean from G
 
         Parameters
         ----------
@@ -161,21 +251,95 @@ class Flicker_noise_data:
         integrand : list, optional
             integrand of ∫PSD df, by default [100, 1000]
         n : float, optional
-            noise power scaling exponent, by default 0
+            noise power scaling exponent, by default self.scatter.n or self.hist.n
+        auto_fit : bool, optional
+            auto fit LineNP, by default False
+        Gmean : np.ndarray
+            1D Gmean array
+        NP : np.ndarray
+            1D noise power array
+        int_method : Literal[&#39;trapezoid&#39;, &#39;simpson&#39;], optional
+            use trapezoidal rule or Simpson's rule to compute integral, by default 'trapezoid'
+        update : bool, optional
+            update scatter plot and histogram, by default True
+        args
+            Axes.plot args
+        kwargs
+            Axes.plot kwargs
+        """
+        if NP is None: NP = noise_power(*PSD(G, self.sampling_rate), integrand, int_method=int_method or self.int_method)
+        if Gmean is None: Gmean = G.mean(axis=1)
+        self.NP = np.concatenate([self.NP, NP])
+        self.Gmean = np.concatenate([self.Gmean, Gmean])
+        if update:
+            if self.scatter:
+                try:
+                    if auto_fit: n = self.scatter.fitting(Gmean, NP)
+                    self.scatter.add_data(self.Gmean, self.NP, n or self.scatter.n, *args, **kwargs)
+                except Exception as E:
+                    pass
+            if self.hist:
+                try:
+                    self.hist.add_data(self.Gmean, self.NP, n or self.hist.n, *args, **kwargs)
+                except Exception as E:
+                    pass
+
+
+class LineNP(Line2D):
+    """
+    2D noise power-conductance scatter plot
+
+    Parameters
+    ----------
+    n : float, optional
+        noise power scaling exponent, by default 0
+    xscale : str, optional
+        linear or log scale of x axis (G), by default 'log'
+    yscale : str, optional
+        linear or log scale of y axis (NP), by default 'log'
+    xlabel : str, optional
+        set xlabel, by default 'Conductance (/G_0$)'
+    ylabel : str, optional
+        set ylabel, by default 'Noise power'
+    kwargs
+        Line2D kwargs
+    """
+
+    def __init__(self, xscale='log', yscale='log', *, xlabel: str = 'Conductance ($G/G_0$)', ylabel: str = 'Noise power', n: float = 0, **kwargs):
+        super().__init__(xscale, yscale, xlabel=xlabel, ylabel=ylabel, **kwargs)
+        self.n = n
+
+    @property
+    def trace(self):
+        if len(self.lines): return self.ax.lines[0].get_data()[0].shape[0]
+        else: return 0
+
+    def add_data(self, Gmean: np.ndarray, NP: np.ndarray, n: float = None, auto_fit: bool = False, *args, clear: bool = True, **kwargs):
+        """
+        Set data into noise power-conductance scatter plot
+
+        Parameters
+        ----------
+        Gmean : np.ndarray
+            1D Gmean array
+        NP : np.ndarray
+            1D NP array
+        n : float, optional
+            noise power scaling exponent, by default None
         auto_fit : bool, optional
             calculate n by fitting NP=c*G^n, by default False
+        clear : bool, optional
+            clear previous data, by default True
+        kwargs
+            Line2D.add_data kwargs
+        """
+        if auto_fit: n = self.fitting(Gmean, NP)
+        if n is not None: self.n = n
+        self.ax.set_ylabel('Noise power / ($G/G_0)^{%.2f}$' % round(self.n, 2) if self.n else 'Noise power')
+        if clear: self.clear_data()
+        super().add_data(Gmean, NP / Gmean**self.n if self.n else NP, marker=".", linestyle='None', *args, **kwargs)
 
-        Returns
-        -------
-        n : float
-            noise power scaling exponent
-        """        
-        self.PSD, self.freq = PSD(G, self.sampling_rate)
-        self.NP = noise_power(self.PSD, self.freq, integrand, int_method=self.int_method)
-        self.Gmean = G.mean(axis=1)
-        return self.plot(self.Gmean, self.NP, n, auto_fit)
-
-    def fit(self, Gmean: np.ndarray, NP: np.ndarray, *, return_c:bool=False) -> float:
+    def fitting(self, Gmean: np.ndarray, NP: np.ndarray, *, return_c: bool = False) -> float:
         """
         Calculate n by fitting NP=c*G^n
 
@@ -194,7 +358,7 @@ class Flicker_noise_data:
             noise power scaling exponent
         c : float, optional
             fitting constant, by default False
-        """        
+        """
         n, c = scipy.optimize.curve_fit(lambda x, n, c: n * x + c,
                                         Gmean if self.xscale == 'linear' else np.log10(np.abs(Gmean)),
                                         NP if self.yscale == 'linear' else np.log10(np.abs(NP)),
@@ -202,97 +366,168 @@ class Flicker_noise_data:
         if return_c: return n, c
         else: return n
 
-    def plot(self, Gmean: np.ndarray, NP: np.ndarray, n: float = 0, auto_fit=False) -> float:
+
+class HistNP(Hist2D):
+    """
+    2D noise power-conductance histogram
+
+    Parameters
+    ----------
+    Glim : _type_
+        _description_
+    NPlim : _type_
+        _description_
+    num_G_bins : _type_
+        _description_
+    num_NP_bins : _type_
+        _description_
+    xscale : str, optional
+        linear or log scale of x axis (G), by default 'log'
+    yscale : str, optional
+        linear or log scale of y axis (NP), by default 'log'
+    xlabel : str, optional
+        set xlabel, by default 'Conductance (/G_0$)'
+    ylabel : str, optional
+        set ylabel, by default 'Noise power'
+    set_colorbar : bool, optional
+        _description_, by default False
+    n : float, optional
+        noise power scaling exponent, by default 0
+    kwargs
+        Hist2D kwargs
+    """
+
+    def __init__(self,
+                 Glim,
+                 NPlim,
+                 num_G_bins,
+                 num_NP_bins,
+                 xscale='log',
+                 yscale='log',
+                 *,
+                 xlabel: str = 'Conductance ($G/G_0$)',
+                 ylabel: str = 'Noise power',
+                 set_colorbar=False,
+                 n: float = 0,
+                 **kwargs):
+        super().__init__(Glim, NPlim, num_G_bins, num_NP_bins, xscale, yscale, xlabel=xlabel, ylabel=ylabel, set_colorbar=set_colorbar, **kwargs)
+        self.n = n
+
+    def add_data(self, Gmean: np.ndarray, NP: np.ndarray, n: float = None, auto_fit: bool = False, *args, clear: bool = True, **kwargs):
         """
-        Set Gmean, NP array into NP-G plot
+        Set data into noise power-conductance histogram
 
         Parameters
         ----------
         Gmean : np.ndarray
-            1D Gmean array
+            _description_
         NP : np.ndarray
-            1D noise power array
+            _description_
         n : float, optional
-            noise power scaling exponent, by default 0
+            noise power scaling exponent, by default None
         auto_fit : bool, optional
-            calculate n by fitting NP=c*G^n, by default False
-
-        Returns
-        -------
-        n : float
-            noise power scaling exponent
-        """        
-        if self.ax.lines: self.ax.lines[0].remove()
-        if auto_fit: n = self.fit(Gmean, NP)
-        y = NP / Gmean**n if n else NP
-        self.ax.plot(Gmean, y, '.')
-        self.ax.set_ylabel('Noise power / ($G/G_0)^{%.2f}$' % round(n, 2) if n else 'Noise power')
-        return n
-
-    def hist2d(
-        self,
-        xlim: tuple[float, float],
-        ylim: tuple[float, float],
-        num_x_bins: int,
-        num_y_bins: int,
-        *,
-        fig: plt.Figure = None,
-        ax: matplotlib.axes.Axes = None,
-        subplots_kw: tuple = None,
-        set_colorbar: bool = False,
-        contour: bool = False,
-    ):
+            calculate n by minimized gaussian2d theta, by default False
+        clear : bool, optional
+            clear previous data, by default True
+        kwargs
+            Hist2D.add_data kwargs
         """
-        _summary_
+        if auto_fit: n = self.fitting(Gmean, NP)
+        if n is not None: self.n = n
+        self.ax.set_ylabel('Noise power / ($G/G_0)^{%.2f}$' % round(self.n, 2) if self.n else 'Noise power')
+        if clear: self.clear_data()
+        super().add_data(Gmean, NP / Gmean**self.n if self.n else NP, trace=Gmean.size, *args, **kwargs)
+
+    def contour(self,
+                x_range: list[float, float] = [-np.inf, np.inf],
+                y_range: list[float, float] = [-np.inf, np.inf],
+                p0: list = None,
+                bounds: list = None,
+                *args,
+                split: bool = False,
+                **kwargs) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Get contour by fitting 2D Gaussian distribution surface
 
         Parameters
         ----------
-        xlim : tuple[float, float]
-            max and min value of x
-        ylim : tuple[float, float]
-            max and min value of y
-        num_x_bins : int
-            number of x bins
-        num_y_bins : int
-            number of y bins
-        subplots_kw : tuple, optional
-            plt.subplots kwargs, by default None
-        set_colorbar : bool, optional
-            add colorbar, by default False
-        contour : bool, optional
-            add contour by fitting 2D Gaussian distribution surface, by default False
+        x_range : list[float, float], optional
+            x range used to fit, by default [-np.inf, np.inf]
+        y_range : list[float, float], optional
+            y range used to fit, by default [-np.inf, np.inf]
+        p0 : list, optional
+            initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log', by default [1,0,0,1,1,0]
+        bounds : list, optional
+            lower and upper bounds of parameters
+        split : bool, optional
+            split surface into multiple gaussian surfaces, by default False
+        args
+            plt.contour args
+        kwargs
+            plt.contour kwargs
 
         Returns
         -------
-        fig : plt.Figure, optional
-            Figure object
-        ax : matplotlib.axes.Axes, optional
-            Axes object
-        h : np.ndarray
-            2d histogram height array, x bin edges, y bin edges
-        param : np.ndarray, optional
+        z : np.ndarray
+            Gaussian distribution surface
+        params : np.ndarray
             gaussian2d fitting parameters (A, ux, uy, sx, sy, theta)
         """
-        (x_min, x_max), (y_min, y_max) = sorted(xlim), sorted(ylim)
-        x_bins = np.linspace(x_min, x_max, num_x_bins + 1) if self.xscale == 'linear' else np.logspace(np.log10(x_min), np.log10(x_max), num_x_bins + 1) if self.xscale == 'log' else None
-        y_bins = np.linspace(y_min, y_max, num_y_bins + 1) if self.yscale == 'linear' else np.logspace(np.log10(y_min), np.log10(y_max), num_y_bins + 1) if self.yscale == 'log' else None
-        if not any([fig, ax]): fig, ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
-        if len(self.ax.lines) == 0: raise ValueError('No data was set. Use set_data first.')
-        h = ax.hist2d(*self.ax.lines[0].get_data(), (x_bins, y_bins), cmap=cmap)
-        ax.set(xscale=self.xscale, yscale=self.yscale, xlabel=self.ax.get_xlabel(), ylabel=self.ax.get_ylabel())
-        if set_colorbar: fig.colorbar(h[-1], ax=ax, shrink=0.5)
-        if contour:
-            x = (h[1][:-1] + h[1][1:]) / 2 if self.xscale == 'linear' else (h[1][:-1] * h[1][1:])**0.5
-            y = (h[2][:-1] + h[2][1:]) / 2 if self.xscale == 'linear' else (h[2][:-1] * h[2][1:])**0.5
-            x, y = np.meshgrid(x, y, indexing='ij')
-            param = scipy.optimize.curve_fit(
-                gaussian2d, (x.ravel() if self.xscale == 'linear' else np.log10(x).ravel(), y.ravel() if self.yscale == 'linear' else np.log10(y).ravel()),
-                h[0].ravel(),
-                bounds=[[0, min(xlim) if self.xscale == 'linear' else np.log10(min(xlim)),
-                         min(ylim) if self.yscale == 'linear' else np.log10(min(ylim)), 0, 0, -np.pi / 4],
-                        [np.inf, max(xlim) if self.xscale == 'linear' else np.log10(max(xlim)),
-                         max(ylim) if self.yscale == 'linear' else np.log10(max(ylim)), np.inf, np.inf, np.pi / 4]])[0]
-            ax.contour(x, y, gaussian2d((x if self.xscale == 'linear' else np.log10(x), y if self.yscale == 'linear' else np.log10(y)), *param), levels=4, colors='k', alpha=0.5)
-            return fig, ax, h[:-1], param
+        x = self.x_ if self.xscale == 'linear' else np.log10(self.x_)
+        y = self.y_ if self.yscale == 'linear' else np.log10(self.y_)
+        fx = np.where((self.x > min(x_range)) & (self.x < max(x_range)))[0]
+        fy = np.where((self.y > min(y_range)) & (self.y < max(y_range)))[0]
+        params = scipy.optimize.curve_fit(
+            multi_gaussian2d, (x[fx][:, fy].ravel(), y[fx][:, fy].ravel()),
+            self.height[fx][:, fy].ravel(),
+            p0=p0 or [1, 0, 0, 1, 1, 0],
+            bounds=bounds or [[0, self.x_min if self.xscale == 'linear' else np.log10(self.x_min), self.y_min if self.yscale == 'linear' else np.log10(self.y_min), 0, 0, -np.pi],
+                              [np.inf, self.x_max if self.xscale == 'linear' else np.log10(self.x_max), self.y_max if self.yscale == 'linear' else np.log10(self.y_max), np.inf, np.inf, np.pi]])[0]
+        z = gaussian2d((x, y), *params.reshape(6, params.size // 6)) if split else multi_gaussian2d((x, y), *params)
+        return z, params
+
+    def plot_contour(self,
+                     x_range: list[float, float] = [-np.inf, np.inf],
+                     y_range: list[float, float] = [-np.inf, np.inf],
+                     p0: list = None,
+                     bounds: list = None,
+                     *args,
+                     split: bool = False,
+                     **kwargs) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Get contour by fitting 2D Gaussian distribution surface and plot surface
+
+        Parameters
+        ----------
+        x_range : list[float, float], optional
+            x range used to fit, by default [-np.inf, np.inf]
+        y_range : list[float, float], optional
+            y range used to fit, by default [-np.inf, np.inf]
+        p0 : list, optional
+            initial guess for the parameters in multi_gaussian function, use log scale if xscale=='log', by default [1,0,0,1,1,0]
+        bounds : list, optional
+            lower and upper bounds of parameters
+        split : bool, optional
+            split surface into multiple gaussian surfaces, by default False
+        args
+            plt.contour args
+        kwargs
+            plt.contour kwargs
+
+        Returns
+        -------
+        z : np.ndarray
+            Gaussian distribution surface
+        params : np.ndarray
+            gaussian2d fitting parameters (A, ux, uy, sx, sy, theta)
+        """
+        z, params = self.contour(x_range, y_range, p0, bounds, split=split)
+        if split:
+            for zi in z:
+                self.ax.contour(self.x_, self.y_, zi, *args, **kwargs)
         else:
-            return fig, ax, h[:-1]
+            self.ax.contour(self.x_, self.y_, z, *args, **kwargs)
+        return z, params
+
+    def fitting(self, *args, **kwargs):
+        raise NotImplementedError

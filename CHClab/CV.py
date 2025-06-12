@@ -306,7 +306,7 @@ class OCPdata:
         return np.mean(self.V)
 
 
-class PlotCV:
+class PlotCV(Line2D):
     """
     Plot cyclic voltammogram
 
@@ -324,13 +324,8 @@ class PlotCV:
         Axes.set kwargs
     """
 
-    def __init__(self, *, fig: plt.Figure = None, ax: matplotlib.axes.Axes = None, subplots_kw: tuple = None, prop_cycle: list = None, **ax_set):
-        if any([fig, ax]): self.fig, self.ax = fig, ax
-        else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
-        if prop_cycle is not None: self.ax.set_prop_cycle(color=prop_cycle)
-        self.ax.set_xlabel('Voltage (V)')
-        self.ax.set_ylabel('Current (A)')
-        if ax_set: self.ax.set(**ax_set)
+    def __init__(self, *, xlabel: str = 'Voltage (V)', ylabel: str = 'Current (A)', **kwargs):
+        super().__init__(xlabel=xlabel, ylabel=ylabel, **kwargs)
 
     def add_data(self, V: np.ndarray, I: np.ndarray, *args, **kwargs):
         """
@@ -347,7 +342,7 @@ class PlotCV:
         kwargs
             Axes.plot kwargs
         """
-        self.ax.plot(V, I, *args, **kwargs)
+        super().add_data(V, I, *args, **kwargs)
 
     def add_segments(self, segments: CVdata | Segments | Segment, *args, label: list = None, **kwargs):
         """
@@ -364,12 +359,8 @@ class PlotCV:
         kwargs
             Axes.plot kwargs
         """
-
         if isinstance(segments, Segment):
             self.add_data(segments.V, segments.I, label=label, *args, **kwargs)
         else:
             for i, s in enumerate(segments):
                 self.add_data(s.V, s.I, label=label[i], *args, **kwargs) if label else self.add_data(s.V, s.I, *args, **kwargs)
-
-    def legend(self):
-        self.ax.legend()

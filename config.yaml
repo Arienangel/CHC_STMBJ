@@ -96,8 +96,8 @@
   "G max": 1.0
   'G #bins': 50
   "G scale": log
-  "NP min": 1.0e-07
-  "NP max": 0.01
+  "NP min": 1.0e-05
+  "NP max": 1.0
   'NP #bins': 50
   "NP scale": log
   "hist_GV": false

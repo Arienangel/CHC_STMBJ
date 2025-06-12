@@ -1612,8 +1612,8 @@ class Flicker_noise_GUI:
         tk.Label(self.frame_config, text='G scale: ').grid(row=4, column=6)
         tk.OptionMenu(self.frame_config, self.G_scale, *['log', 'linear']).grid(row=4, column=7)
         # row 5
-        self.NP_min = tk.DoubleVar(self.window, value=0.0000001)
-        self.NP_max = tk.DoubleVar(self.window, value=0.01)
+        self.NP_min = tk.DoubleVar(self.window, value=0.00001)
+        self.NP_max = tk.DoubleVar(self.window, value=1)
         self.NP_bins = tk.IntVar(self.window, value=50)
         self.NP_scale = tk.StringVar(self.window, value='log')
         tk.Label(self.frame_config, text='NP min: ').grid(row=5, column=0)
@@ -1730,15 +1730,14 @@ class Flicker_noise_GUI:
                 for item in self.frame_figure.winfo_children():
                     item.destroy()
                 gc.collect()
+                self.Fdata=Flicker_noise.Flicker_noise_data(self.run_config['sampling_rate'], self.run_config['G_scale'], self.run_config['NP_scale'])
                 self.G = np.empty((0, self.run_config['length']))
-                self.Gmean = np.array([])
-                self.NP = np.array([])
                 self.t = np.arange(self.run_config['length']) / self.run_config['sampling_rate']
                 self.freq = Flicker_noise.scipy.fft.fftshift(Flicker_noise.scipy.fft.fftfreq(self.run_config['length'], 1 / self.run_config['sampling_rate']))
                 self.PSD = np.empty((0, self.freq.size))
                 # plot NP-Gmean
                 if self.run_config['plot_line_NP'] or self.run_config['plot_hist_NP']:
-                    self.line_NP = Flicker_noise.Flicker_noise_data(self.run_config['sampling_rate'], self.run_config['G_scale'], self.run_config['NP_scale'])
+                    self.line_NP = self.Fdata.get_scatter(prop_cycle='#1f77b4')
                     self.n = tk.DoubleVar(self.window, value=1.0)
                     self.auto = tk.BooleanVar(self.window, value=False)
                     frame_n = tk.Frame(self.frame_figure)
@@ -1751,14 +1750,13 @@ class Flicker_noise_GUI:
                     self.auto_n_button = tk.Checkbutton(frame_n, variable=self.auto, text='Auto', command=self.set_n)
                     self.auto_n_button.pack(side='left')
                 if self.run_config['plot_hist_NP']:
-                    self.hist_NP = Flicker_noise.Flicker_noise_data(self.run_config['sampling_rate'], self.run_config['G_scale'], self.run_config['NP_scale'])
+                    self.hist_NP = self.Fdata.get_hist((self.G_min.get(), self.G_max.get()), (self.NP_min.get(), self.NP_max.get()), self.G_bins.get(), self.NP_bins.get())
                     self.canvas_hist_NP = FigureCanvasTkAgg(self.hist_NP.fig, self.frame_figure)
                     self.canvas_hist_NP.get_tk_widget().grid(row=0, column=0, columnspan=5, pady=10)
                     self.navtool_hist_NP = NavigationToolbar2Tk(self.canvas_hist_NP, self.frame_figure, pack_toolbar=False)
                     self.navtool_hist_NP.grid(row=1, column=0, columnspan=4, sticky='w')
                     self.canvas_hist_NP.draw_idle()
                 if self.run_config['plot_line_NP']:
-                    self.line_NP.ax.set_prop_cycle(color='#1f77b4')
                     self.canvas_line_NP = FigureCanvasTkAgg(self.line_NP.fig, self.frame_figure)
                     self.canvas_line_NP.get_tk_widget().grid(row=0, column=5, columnspan=5, pady=10)
                     self.navtool_line_NP = NavigationToolbar2Tk(self.canvas_line_NP, self.frame_figure, pack_toolbar=False)
@@ -1784,24 +1782,15 @@ class Flicker_noise_GUI:
                     self.autoscale_G = tk.BooleanVar(self.window, value=True)
                     tk.Checkbutton(self.frame_figure, variable=self.autoscale_G, text="Autoscale").grid(row=2, column=10, columnspan=10, sticky='w')
                 # line Gt
-                class Line2D:
-
-                    def __init__(self):
-                        self.fig, self.ax = plt.subplots()
-
                 if self.run_config['plot_line_Gt']:
-                    self.line_Gt = Line2D()
-                    self.line_Gt.ax.set(xlabel='Time (s)', ylabel='Conductance ($G/G_0$)', yscale=self.run_config['G_scale'], ylim=(self.run_config['lower'], self.run_config['upper']))
-                    self.line_Gt.ax.set_prop_cycle(color='#1f77b4')
+                    self.line_Gt = Flicker_noise.Line2D(prop_cycle='#1f77b4', xlabel='Time (s)', ylabel='Conductance ($G/G_0$)', yscale=self.run_config['G_scale'], ylim=(self.run_config['lower'], self.run_config['upper']))
                     self.canvas_line_Gt = FigureCanvasTkAgg(self.line_Gt.fig, self.frame_figure)
                     self.canvas_line_Gt.get_tk_widget().grid(row=0, column=20, columnspan=5, pady=10)
                     self.navtool_line_Gt = NavigationToolbar2Tk(self.canvas_line_Gt, self.frame_figure, pack_toolbar=False)
                     self.navtool_line_Gt.grid(row=1, column=20, columnspan=4, sticky='w')
                     self.canvas_line_Gt.draw_idle()
                 if self.run_config['plot_line_PSD']:
-                    self.line_PSD = Line2D()
-                    self.line_PSD.ax.set(xlabel='Frequency (Hz)', ylabel='Noise PSD', xscale='log', yscale='log', xlim=self.run_config['integrand'])
-                    self.line_PSD.ax.set_prop_cycle(color='#1f77b4')
+                    self.line_PSD = Flicker_noise.Line2D(prop_cycle='#1f77b4', xlabel='Frequency (Hz)', ylabel='Noise PSD', xscale='log', yscale='log', xlim=self.run_config['integrand'])
                     self.canvas_line_PSD = FigureCanvasTkAgg(self.line_PSD.fig, self.frame_figure)
                     self.canvas_line_PSD.get_tk_widget().grid(row=0, column=25, columnspan=5, pady=10)
                     self.navtool_line_PSD = NavigationToolbar2Tk(self.canvas_line_PSD, self.frame_figure, pack_toolbar=False)
@@ -1932,18 +1921,18 @@ class Flicker_noise_GUI:
         G = G[f]
         if G.size > 0:
             self.G = np.vstack([self.G, G])
-            self.Gmean = np.concatenate([self.Gmean, G.mean(axis=1)])
+            Gmean=G.mean(axis=1)
             PSD = Flicker_noise.PSD(G, self.run_config['sampling_rate'], return_freq=False)
             NP = Flicker_noise.noise_power(PSD, self.freq, integrand=self.run_config['integrand'])
             self.PSD = np.vstack([self.PSD, PSD])
-            self.NP = np.concatenate([self.NP, NP])
+            self.Fdata.add_data(Gmean=Gmean, NP=NP, update=False)
             if self.run_config['plot_line_NP'] or self.run_config['plot_hist_NP']:
                 self.set_n()
             if self.run_config['plot_hist_Gmean']:
-                self.hist_Gmean.add_data(self.Gmean, set_ylim=self.autoscale_G.get())
+                self.hist_Gmean.add_data(Gmean, set_ylim=self.autoscale_G.get())
                 self.queue.put(Queue_Item(self.canvas_Gmean.draw_idle))
             if self.run_config['plot_hist_G']:
-                self.hist_G.add_data(self.G, set_ylim=self.autoscale_G.get())
+                self.hist_G.add_data(G, set_ylim=self.autoscale_G.get())
                 self.queue.put(Queue_Item(self.canvas_G.draw_idle))
             if self.run_config['plot_line_Gt'] or self.run_config['plot_line_PSD']:
                 if self.current_trace_G.get() < 0: self.queue.put(Queue_Item(self.current_trace_G.set, self.current_trace_G.get()))
@@ -1954,15 +1943,17 @@ class Flicker_noise_GUI:
         if self.auto.get():
             self.set_n_button.config(state='disabled', bg='white')
             self.n_entry.config(state='readonly')
+            n = self.line_NP.fitting(self.Fdata.Gmean, self.Fdata.NP)
+            self.queue.put(Queue_Item(self.n.set, round(n, 2)))
         else:
             self.set_n_button.config(state='normal', bg='lime')
             self.n_entry.config(state='normal')
-        n = self.line_NP.plot(self.Gmean, self.NP, self.n.get(), auto_fit=self.auto.get())
-        self.queue.put(Queue_Item(self.n.set, round(n, 2)))
+            n = self.n.get()
         if self.run_config['plot_line_NP']:
+            self.line_NP.add_data(self.Fdata.Gmean, self.Fdata.NP, n, clear=True)
             self.queue.put(Queue_Item(self.canvas_line_NP.draw_idle))
         if self.run_config['plot_hist_NP']:
-            self.line_NP.hist2d((self.G_min.get(), self.G_max.get()), (self.NP_min.get(), self.NP_max.get()), self.G_bins.get(), self.NP_bins.get(), fig=self.hist_NP.fig, ax=self.hist_NP.ax)
+            self.hist_NP.add_data(self.Fdata.Gmean, self.Fdata.NP, n, clear=True)
             self.queue.put(Queue_Item(self.canvas_hist_NP.draw_idle))
 
     def import_setting(self, data: dict = None):
@@ -2019,13 +2010,30 @@ class Flicker_noise_GUI:
 
     def cleanup(self, catagory: Literal['partial', 'all']):
         if hasattr(self, 'G'): del self.G
-        if hasattr(self, 'Gmeans'): del self.Gmean
         if hasattr(self, 'freq'): del self.freq
         if hasattr(self, 'PSD'): del self.PSD
-        if hasattr(self, 'NP'): del self.NP
+        if hasattr(self, 'Fdata'): 
+            if hasattr(self.Fdata, 'Gmeans'): del self.Fdata.Gmean
+            if hasattr(self.Fdata, 'NP'): del self.Fdata.NP
+            del self.Fdata
         if hasattr(self, 'line_NP'):
             self.line_NP.fig.clear()
             del self.line_NP
+        if hasattr(self, 'hist_NP'):
+            self.hist_NP.fig.clear()
+            del self.hist_NP
+        if hasattr(self, 'hist_G'):
+            self.hist_G.fig.clear()
+            del self.hist_G
+        if hasattr(self, 'hist_Gmean'):
+            self.hist_Gmean.fig.clear()
+            del self.hist_Gmean
+        if hasattr(self, 'line_Gt'):
+            self.line_Gt.fig.clear()
+            del self.line_Gt
+        if hasattr(self, 'line_PSD'):
+            self.line_PSD.fig.clear()
+            del self.line_PSD
         if catagory == 'partial':
             gc.collect()
             return
