@@ -69,10 +69,11 @@ def gaussian(x: np.ndarray, a: float | Iterable, u: float | Iterable, s: float |
         output values
     """
     if isinstance(a, Iterable):
-        a=np.expand_dims(a, axis=-1)
-        u=np.expand_dims(u, axis=-1)
-        s=np.expand_dims(s, axis=-1)
+        a = np.expand_dims(a, axis=-1)
+        u = np.expand_dims(u, axis=-1)
+        s = np.expand_dims(s, axis=-1)
     return a * np.exp(-((x - u) / s)**2 / 2)
+
 
 def multi_gaussian(x: np.ndarray, *args: float) -> np.ndarray:
     """
@@ -122,12 +123,12 @@ def gaussian2d(xy: Iterable[np.ndarray], a: float, ux: float, uy: float, sx: flo
     """
     x, y = xy
     if isinstance(a, Iterable):
-        a=np.expand_dims(a, axis=(-1, -2))
-        ux=np.expand_dims(ux, axis=(-1, -2))
-        uy=np.expand_dims(uy, axis=(-1, -2))
-        sx=np.expand_dims(sx, axis=(-1, -2))
-        sy=np.expand_dims(sy, axis=(-1, -2))
-        theta=np.expand_dims(theta, axis=(-1, -2))
+        a = np.expand_dims(a, axis=(-1, -2))
+        ux = np.expand_dims(ux, axis=(-1, -2))
+        uy = np.expand_dims(uy, axis=(-1, -2))
+        sx = np.expand_dims(sx, axis=(-1, -2))
+        sy = np.expand_dims(sy, axis=(-1, -2))
+        theta = np.expand_dims(theta, axis=(-1, -2))
     i = (np.cos(theta) / sx)**2 / 2 + (np.sin(theta) / sy)**2 / 2
     j = np.sin(2 * theta) / (2 * sx**2) - np.sin(2 * theta) / (2 * sy**2)
     k = (np.sin(theta) / sx)**2 / 2 + (np.cos(theta) / sy)**2 / 2
@@ -413,7 +414,7 @@ class Hist1D:
         self.height.fill(0)
         self.plot.set_data(self.height)
 
-    def fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, split:bool=False) -> tuple[np.ndarray, np.ndarray]:
+    def fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, split: bool = False) -> tuple[np.ndarray, np.ndarray]:
         """
         Fit histogram with multiple gaussian curves
 
@@ -438,10 +439,16 @@ class Hist1D:
         f = np.where((self.x > min(x_range)) & (self.x < max(x_range)))
         x = self.x if self.xscale == 'linear' else np.log10(self.x)
         params = scipy.optimize.curve_fit(multi_gaussian, x[f], self.height_per_trace[f], p0=p0 or [1, 0, 1], bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])[0]
-        y=gaussian(x, *params.reshape(3, params.size//3)) if split else multi_gaussian(x, *params)
+        y = gaussian(x, *params.reshape(3, params.size // 3)) if split else multi_gaussian(x, *params)
         return y, params
 
-    def plot_fitting(self, x_range: list[float, float] = [-np.inf, np.inf], p0: list = None, bounds: list = None, *args, split:bool=False, **kwargs) -> tuple[np.ndarray, np.ndarray, list[matplotlib.lines.Line2D]]:
+    def plot_fitting(self,
+                     x_range: list[float, float] = [-np.inf, np.inf],
+                     p0: list = None,
+                     bounds: list = None,
+                     *args,
+                     split: bool = False,
+                     **kwargs) -> tuple[np.ndarray, np.ndarray, list[matplotlib.lines.Line2D]]:
         """
         Fit histogram with multiple gaussian curves and plot curves
 
@@ -530,7 +537,7 @@ class Hist2D:
                 self.colorbar.set_label(colorbar_label)
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
         self.y = np.sqrt(self.y_bins[1:] * self.y_bins[:-1]) if yscale == 'log' else (self.y_bins[1:] + self.y_bins[:-1]) / 2
-        self.x_, self.y_=np.meshgrid(self.x, self.y, indexing='ij')
+        self.x_, self.y_ = np.meshgrid(self.x, self.y, indexing='ij')
 
     @property
     def height_per_trace(self):
@@ -608,25 +615,26 @@ class Hist2D:
 
         def _gaussian_fit(label, xdata, ydata, p0, bounds):
             try:
-                return scipy.optimize.curve_fit(gaussian, xdata, ydata, p0=p0, bounds=bounds)[0]
+                return scipy.optimize.curve_fit(multi_gaussian, xdata, ydata, p0=p0, bounds=bounds)[0].reshape([3, len(p0) // 3]).T
             except Exception as E:
                 logging.warning(f'Least-square minimization failed at {axis}={label}')
-                return default_values
+                return np.reshape(default_values, [3, len(p0) // 3]).T
 
-        if len(default_values) != 3: raise ValueError('Default value should be [A, U, S]')
+        if len(default_values) % 3 != 0: raise ValueError('Default value should be [A..., U..., S...]')
+        sigma = np.expand_dims(sigma, (-1, -2))
         match axis:
             case 'x':
                 A, U, S = np.array([
                     _gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
                     for ind, z in enumerate(self.height_per_trace)
                 ]).T
-                return U + np.expand_dims(sigma, -1) * S if self.yscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
+                return ((U + sigma * S) if self.yscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1]))
             case 'y':
                 A, U, S = np.array([
                     _gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
                     for ind, z in enumerate(self.height_per_trace.T)
                 ]).T
-                return U + np.expand_dims(sigma, -1) * S if self.xscale == 'linear' else 10**(U + np.expand_dims(sigma, -1) * S)
+                return ((U + sigma * S) if self.xscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1]))
 
     def plot_fitting(self,
                      axis: Literal['x', 'y'] = 'x',
@@ -651,7 +659,9 @@ class Hist2D:
             calculate multiple lines with μ+n*σ, by default 0, by default 0
         default_values : list[float], optional
             values used when least-square minimization failed, by default [np.nan, np.nan, np.nan]
-
+        kwargs
+            Axes.plot kwargs
+            
         Returns
         -------
         np.ndarray
