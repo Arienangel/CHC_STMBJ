@@ -1,13 +1,16 @@
 from .common import *
 
 
-def extract_data(raw_data: Union[np.ndarray, str, list],
+def extract_data(raw_data: Union[np.ndarray, str, list] = None,
                  length: int = 1600,
                  upper: float = 3.2,
                  lower: float = 1e-6,
                  direction: Literal['pull', 'crash', 'both'] = 'pull',
                  check_size: tuple[int, int] = [10, 10],
                  cut_point: float = None,
+                 offset: tuple[int, int] = [0, 0],*,
+                 G_raw: np.ndarray = None,
+                 X_raw: np.ndarray = None,
                  **kwargs) -> np.ndarray:
     """
     Extract traces from raw data
@@ -28,29 +31,43 @@ def extract_data(raw_data: Union[np.ndarray, str, list],
         length of data in the front or end of the trace used to determine the upper/lower limit, by default [10, 10]
     cut_point : float, optional
         used to find traces at G=cut_point, by default (upper * lower)**0.5
+    offset : list, optional
+        additional length before and after extracted traces, by default [0, 0]
     kwargs
         load_data kwargs
-
+    G_raw : np.array, optional
+        raw conductance in 1D array , by default None
+    X_raw : np.array, optional
+        raw dispolacement in 1D array, by default None
     Returns
     -------
     G : np.ndarray
         2D G array with shape (trace, length)
+    X : np.ndarray, optional
+        2D X array with shape (trace, length), return only when X_raw is given
     """
-    if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
-    if raw_data.size:
+    if raw_data is not None:
+        if not isinstance(raw_data, np.ndarray): raw_data = load_data(raw_data, **kwargs)
+        G_raw = raw_data if raw_data.ndim == 1 else raw_data[0]
+    if G_raw.size:
         if cut_point == None: cut_point = (upper * lower)**0.5
-        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(raw_data > cut_point, 1, 0))), distance=length)
+        index, *_ = scipy.signal.find_peaks(np.abs(np.gradient(np.where(G_raw > cut_point, 1, 0))), distance=length)
         if len(index):
-            split_trace = np.stack(
-                [raw_data[:length] if (i - length // 2) < 0 else raw_data[-length:] if (i + length // 2) > raw_data.size else raw_data[i - length // 2:i + length // 2] for i in index])
+            G_trace = np.stack([G_raw[i - length // 2 - offset[0]:i + length // 2 + offset[1]] for i in index if (i + length // 2 + offset[1] < G_raw.size) and (i - length // 2 + offset[0] >= 0)])
+            total_length = length + sum(offset)
             match direction:
                 case 'pull':
-                    return split_trace[(split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)]
+                    condition = (G_trace[:, offset[0]:offset[0] + check_size[0]] > upper).any(axis=1) & (G_trace[:, -check_size[1] - offset[1]:total_length - offset[1]] < lower).any(axis=1)
                 case 'crash':
-                    return split_trace[(split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1)]
+                    condition = (G_trace[:, offset[0]:offset[0] + check_size[0]] < lower).any(axis=1) & (G_trace[:, -check_size[1] - offset[1]:total_length - offset[1]] > upper).any(axis=1)
                 case 'both':
-                    return split_trace[((split_trace[:, :check_size[0]] > upper).any(axis=1) & (split_trace[:, -check_size[1]:] < lower).any(axis=1)) |
-                                       ((split_trace[:, :check_size[0]] < lower).any(axis=1) & (split_trace[:, -check_size[1]:] > upper).any(axis=1))]
+                    condition = ((G_trace[:, offset[0]:offset[0] + check_size[0]] > upper).any(axis=1) & (G_trace[:, -check_size[1] - offset[1]:total_length - offset[1]] < lower).any(axis=1)) | (
+                        (G_trace[:, offset[0]:offset[0] + check_size[0]] < lower).any(axis=1) & (G_trace[:, -check_size[1] - offset[1]:total_length - offset[1]] > upper).any(axis=1))
+            if X_raw is not None:
+                X_trace = np.stack([X_raw[i - length // 2 - offset[0]:i + length // 2 + offset[1]] for i in index if (i + length // 2 + offset[1] < G_raw.size) and (i - length // 2 + offset[0] >= 0)])
+                return G_trace[condition], X_trace[condition]
+            else:
+                return G_trace[condition]
     return np.empty((0, length))
 
 
