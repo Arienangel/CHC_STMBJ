@@ -68,6 +68,8 @@ def PSD(G: np.ndarray, sampling_rate: float = 40000, *, return_freq: bool = True
     freq : np.array, optional
         1D frequency of PSD
     """
+    if G.ndim==1:
+        G=np.expand_dims(G, 0)
     dt = 1 / sampling_rate
     n = G.shape[1]
     t = n / sampling_rate
@@ -480,7 +482,7 @@ class HistNP(Hist2D):
         params = scipy.optimize.curve_fit(
             multi_gaussian2d, (x[fx][:, fy].ravel(), y[fx][:, fy].ravel()),
             self.height[fx][:, fy].ravel(),
-            p0=p0 or [1, 0, 0, 1, 1, 0],
+            p0=p0 if p0 is not None else [1, 0, 0, 1, 1, 0],
             bounds=bounds or [[0, self.x_min if self.xscale == 'linear' else np.log10(self.x_min), self.y_min if self.yscale == 'linear' else np.log10(self.y_min), 0, 0, -np.pi],
                               [np.inf, self.x_max if self.xscale == 'linear' else np.log10(self.x_max), self.y_max if self.yscale == 'linear' else np.log10(self.y_max), np.inf, np.inf, np.pi]])[0]
         z = gaussian2d((x, y), *params.reshape(6, params.size // 6)) if split else multi_gaussian2d((x, y), *params)

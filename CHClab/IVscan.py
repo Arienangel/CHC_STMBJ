@@ -11,8 +11,8 @@ def extract_data(raw_data: Union[np.ndarray, str, list] = None,
                  mode: Literal['gradient', 'height'] = 'height',
                  tolerance: int = 0,
                  *,
-                 I_raw: np.array = None,
-                 V_raw: np.array = None,
+                 I_raw: np.ndarray = None,
+                 V_raw: np.ndarray = None,
                  **kwargs) -> np.ndarray:
     """
     Extract traces from raw data

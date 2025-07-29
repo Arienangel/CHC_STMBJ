@@ -27,7 +27,7 @@ cmap = matplotlib.colors.LinearSegmentedColormap('Cmap',
 G0 = physical_constants['conductance quantum'][0]
 
 
-def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
+def conductance(I: np.ndarray, V: np.ndarray, abs: bool = False) -> np.ndarray:
     """
     Calculate conductance
 
@@ -37,6 +37,8 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
         current (A)
     V : np.ndarray
         voltage (V)
+    abs : bool, optional
+        absolute value, by default False
 
     Returns
     -------
@@ -44,7 +46,7 @@ def conductance(I: np.ndarray, V: np.ndarray, **kwargs) -> np.ndarray:
         conductance (G/G0)
     """
     with np.errstate(divide='ignore'):
-        return I / V / G0
+        return np.abs(I / V / G0) if abs else I / V / G0
 
 
 def gaussian(x: np.ndarray, a: float | Iterable, u: float | Iterable, s: float | Iterable) -> np.ndarray:
@@ -355,8 +357,8 @@ class Hist1D:
         linear or log scale of x axis, by default 'linear'
     subplots_kw : tuple, optional
         plt.subplots kwargs, by default None
-    set_grid : bool, optional
-        add grid lines, by default True
+    set_grid : Literal['both', 'x', 'y']|bool, optional
+        add grid lines on axis, set to False to disable, by default 'both'
     kwargs
         Axes.set kwargs
     """
@@ -369,7 +371,7 @@ class Hist1D:
                  fig: plt.Figure = None,
                  ax: matplotlib.axes.Axes = None,
                  subplots_kw: tuple = None,
-                 set_grid: bool = True,
+                 set_grid: Literal['both', 'x', 'y'] | bool = 'both',
                  **kwargs) -> None:
         self.x_min, self.x_max = sorted(xlim)
         self.x_bins = np.linspace(self.x_min, self.x_max, num_x_bins + 1) if xscale == 'linear' else np.logspace(np.log10(self.x_min), np.log10(self.x_max), num_x_bins +
@@ -381,7 +383,7 @@ class Hist1D:
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.stairs(np.zeros(self.x_bins.size - 1), self.x_bins, fill=True)
         self.ax.set(xlim=(self.x_min, self.x_max), xscale=self.xscale, **kwargs)
-        if set_grid: self.ax.grid(visible=True, which='major')
+        if set_grid: self.ax.grid(visible=True, which='major', axis=set_grid)
         self.x = np.sqrt(self.x_bins[1:] * self.x_bins[:-1]) if xscale == 'log' else (self.x_bins[1:] + self.x_bins[:-1]) / 2
 
     @property
@@ -496,6 +498,8 @@ class Hist2D:
         linear or log scale of y axis, by default 'linear'
     subplots_kw : tuple, optional
         plt.subplots kwargs, by default None
+    set_grid : Literal['both', 'x', 'y']|bool, optional
+        add grid lines on axis, set to False to disable, by default False
     set_colorbar : bool, optional
         add colorbar, by default True
     colorbar_label : str, optional
@@ -515,6 +519,7 @@ class Hist2D:
                  fig: plt.Figure = None,
                  ax: matplotlib.axes.Axes = None,
                  subplots_kw: tuple = None,
+                 set_grid: Literal['both', 'x', 'y'] | bool = False,
                  set_colorbar: bool = True,
                  colorbar_label: str = None,
                  **kwargs) -> None:
@@ -531,6 +536,7 @@ class Hist2D:
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
         self.plot = self.ax.pcolormesh(self.x_bins, self.y_bins, np.zeros((self.y_bins.size - 1, self.x_bins.size - 1)), cmap=cmap, vmin=0)
         self.ax.set(xlim=(self.x_min, self.x_max), ylim=(self.y_min, self.y_max), xscale=self.xscale, yscale=self.yscale, **kwargs)
+        if set_grid: self.ax.grid(visible=True, which='major', axis=set_grid)
         if set_colorbar:
             self.colorbar = self.fig.colorbar(self.plot, ax=self.ax, shrink=0.5)
             if colorbar_label:
@@ -628,13 +634,13 @@ class Hist2D:
                     _gaussian_fit(self.x[ind], self.y if self.yscale == 'linear' else np.log10(self.y), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
                     for ind, z in enumerate(self.height_per_trace)
                 ]).T
-                return ((U + sigma * S) if self.yscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1]))
+                return ((U + sigma * S) if self.yscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1])).squeeze()
             case 'y':
                 A, U, S = np.array([
                     _gaussian_fit(self.y[ind], self.x if self.xscale == 'linear' else np.log10(self.x), z, p0=p0 or 0, bounds=bounds or [[0, -np.inf, 0], [np.inf, np.inf, np.inf]])
                     for ind, z in enumerate(self.height_per_trace.T)
                 ]).T
-                return ((U + sigma * S) if self.xscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1]))
+                return ((U + sigma * S) if self.xscale == 'linear' else 10**(U + sigma * S)).reshape((U.shape[0] * sigma.size, U.shape[1])).squeeze()
 
     def plot_fitting(self,
                      axis: Literal['x', 'y'] = 'x',
@@ -678,6 +684,24 @@ class Hist2D:
 
 
 class Line2D:
+    """
+    2D Lines
+
+    Parameters
+    ----------
+    xscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of x axis, by default 'linear'
+    yscale : Literal[&#39;linear&#39;, &#39;log&#39;], optional
+        linear or log scale of y axis, by default 'linear'
+    subplots_kw : tuple, optional
+        plt.subplots kwargs, by default None
+    set_grid : Literal['both', 'x', 'y']|bool, optional
+        add grid lines on axis, set to False to disable, by default False
+    prop_cycle : tuple, optional
+        set axes prop cycle color, set to None to use matplotlib dafault
+    kwargs
+        Axes.set kwargs
+    """
 
     def __init__(self,
                  xscale: Literal['linear', 'log'] = 'linear',
@@ -685,6 +709,7 @@ class Line2D:
                  *,
                  fig: plt.Figure = None,
                  ax: matplotlib.axes.Axes = None,
+                 set_grid: Literal['both', 'x', 'y'] | bool = False,
                  prop_cycle: list = None,
                  subplots_kw: tuple = None,
                  **kwargs) -> None:
@@ -694,6 +719,7 @@ class Line2D:
         self.legend = None
         if any([fig, ax]): self.fig, self.ax = fig, ax
         else: self.fig, self.ax = plt.subplots(**subplots_kw) if subplots_kw else plt.subplots()
+        if set_grid: self.ax.grid(visible=True, which='major', axis=set_grid)
         if prop_cycle is not None: self.ax.set_prop_cycle(color=prop_cycle)
         self.ax.set(xscale=self.xscale, yscale=self.yscale, **kwargs)
 
@@ -721,7 +747,7 @@ class Line2D:
         else:
             self.ax.plot(x.T, y.T, *args, **kwargs)
 
-    def clear_data(self):
+    def clear_data(self) -> None:
         for i in self.lines:
             i.remove()
         if self.prop_cycle:
@@ -729,5 +755,8 @@ class Line2D:
         else:
             self.ax.set_prop_cycle(None)
 
-    def legend(self):
-        self.legend = self.ax.legend()
+    def set_legend(self, clear: bool = True, *args, **kwargs):
+        if clear:
+            if hasattr(self, 'legend'): self.legend.remove()
+        self.legend = self.ax.legend(*args, **kwargs)
+        return self.legend
